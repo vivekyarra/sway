@@ -74,6 +74,9 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error)
 		return nil, err
 	}
 	a.Shop = &shop.Service{DB: d, Agent: a.Agent, Categories: w.Categories, Samples: cfg.Attribution.Samples, MaxSources: cfg.Attribution.MaxSources}
+	if cfg.CatalogMode == "live" && cfg.Channel3APIKey != "" {
+		a.Shop.Live = &catalog.Channel3{APIKey: cfg.Channel3APIKey, BaseURL: cfg.Channel3BaseURL}
+	}
 	a.Pay = &payments.Service{DB: d, PP: provider, Cfg: cfg, Log: log}
 	a.Attr = &attribution.Runner{DB: d, Agent: a.Agent, Shop: a.Shop, Cfg: cfg.Attribution, Log: log, AfterAllocate: a.Pay.Reconcile}
 	if claude != nil {

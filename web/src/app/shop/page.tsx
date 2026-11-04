@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { Checkout } from "@/components/Checkout";
 import { ProductArt } from "@/components/ProductArt";
 import { useConfig } from "@/components/Providers";
@@ -30,13 +31,43 @@ function specLine(specs: Record<string, string | number | boolean>) {
 }
 
 export default function ShopPage() {
+  return (
+    <Suspense fallback={<div className="mx-auto max-w-7xl px-4 py-8"><Spinner /></div>}>
+      <Shop />
+    </Suspense>
+  );
+}
+
+function Shop() {
   const cfg = useConfig();
+  const handoff = useSearchParams().get("decision");
   const [typed, setText] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [stage, setStage] = useState(-1);
+  const [busy, setBusy] = useState(!!handoff);
+  const [stage, setStage] = useState(handoff ? 0 : -1);
+  const [fromAgent, setFromAgent] = useState(false);
   const [decision, setDecision] = useState<Decision | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // A decision handed over by an external agent (MCP shop_recommend returns /shop/?decision=...).
+  useEffect(() => {
+    if (!handoff) return;
+    let alive = true;
+    api
+      .get<Decision>(`/decisions/${handoff}`)
+      .then((d) => {
+        if (!alive) return;
+        setDecision(d);
+        setText(d.request);
+        setFromAgent(true);
+        setStage(3);
+      })
+      .catch((e) => alive && setError(e instanceof ApiError ? e : new ApiError(0, "error", String(e))))
+      .finally(() => alive && setBusy(false));
+    return () => {
+      alive = false;
+    };
+  }, [handoff]);
   const prompts = cfg?.categories ?? [];
 
   const text = typed ?? prompts.find((p) => p.key === "headphones")?.suggested_prompt ?? "";
@@ -131,6 +162,12 @@ export default function ShopPage() {
         </div>
       </form>
 
+      {fromAgent && decision && (
+        <div className="mt-4 rounded-xl border border-accent/30 bg-accent-soft px-4 py-3 text-sm text-accent-ink">
+          Handed over by your AI agent through Sway&apos;s MCP server. Review why it chose this, then pay with PayPal yourself: agents never touch your money.
+        </div>
+      )}
+
       {error && (
         <div className="mt-4">
           <ErrorBox message={error.message} onRetry={() => ask(text)} />
@@ -174,7 +211,7 @@ export default function ShopPage() {
                 const over = decision.budget_cents > 0 && p.price_cents > decision.budget_cents;
                 return (
                   <div key={p.id} className={`card rise p-3 transition ${chosen ? "ring-2 ring-accent" : stage >= 3 ? "opacity-70" : ""}`}>
-                    <ProductArt id={p.id} category={p.category} className="h-24 w-full" />
+                    <ProductArt id={p.id} category={p.category} imageUrl={p.image_url} className="h-24 w-full" />
                     <div className="mt-2 flex items-start justify-between gap-2">
                       <div>
                         <div className="font-semibold">{p.name}</div>
@@ -217,7 +254,7 @@ export default function ShopPage() {
                 </div>
                 <div className="p-5">
                   <div className="flex gap-4">
-                    <ProductArt id={decision.chosen.id} category={decision.chosen.category} className="h-24 w-32 shrink-0" />
+                    <ProductArt id={decision.chosen.id} category={decision.chosen.category} imageUrl={decision.chosen.image_url} className="h-24 w-32 shrink-0" />
                     <div>
                       <div className="text-xl font-semibold">{decision.chosen.name}</div>
                       <div className="text-sm text-muted">{decision.chosen.tagline}</div>

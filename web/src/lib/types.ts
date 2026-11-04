@@ -5,6 +5,8 @@ export type Product = {
   category: string;
   price_cents: number;
   tagline: string;
+  image_url?: string;
+  source?: string;
   specs: Record<string, string | number | boolean>;
 };
 

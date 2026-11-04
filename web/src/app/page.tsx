@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ConnectAgent } from "@/components/ConnectAgent";
 import { usePoll } from "@/lib/hooks";
 import { usd } from "@/lib/format";
 import type { Merchant } from "@/lib/types";
@@ -106,6 +107,8 @@ export default function Home() {
           </ol>
         </div>
       </section>
+
+      <ConnectAgent />
 
       <footer className="border-t border-line">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-6 text-xs text-muted sm:px-6">

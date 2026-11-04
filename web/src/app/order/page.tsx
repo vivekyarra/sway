@@ -76,6 +76,7 @@ function OrderView({ id }: { id: string }) {
     try {
       await api.post(`/merchant/orders/${o!.id}/refund`, amount ? { amount_cents: amount, reason: "requested from order page" } : { reason: "requested from order page" });
       setMsg("Refund issued. Pending commission for this order is forfeited.");
+      if (!o!.seeded) completeStep(7);
       refresh();
     } catch (e) {
       setMsg((e as Error).message);

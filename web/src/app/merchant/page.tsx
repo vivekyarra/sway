@@ -72,7 +72,10 @@ function OrderActions({ row, onDone }: { row: OrderRow; onDone: (msg: string) =>
       <button
         className="btn btn-ghost btn-sm py-1 text-forfeit"
         disabled={!refundable || busy}
-        onClick={() => confirm(`Refund ${row.product_name} (${usd(row.amount_cents - row.refunded_cents)})?`) && act(() => api.post(`/merchant/orders/${row.id}/refund`, { reason: "merchant refund" }), `Refunded ${row.product_name}. Pending commission forfeited.`)}
+        onClick={() => confirm(`Refund ${row.product_name} (${usd(row.amount_cents - row.refunded_cents)})?`) && act(async () => {
+            await api.post(`/merchant/orders/${row.id}/refund`, { reason: "merchant refund" });
+            completeStep(7);
+          }, `Refunded ${row.product_name}. Pending commission forfeited.`)}
       >
         Refund
       </button>

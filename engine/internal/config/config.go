@@ -130,7 +130,7 @@ func Load() (Config, error) {
 		DemoMode:          boolean("DEMO_MODE", true),
 		CatalogMode:       str("CATALOG_MODE", "demo"),
 		Channel3APIKey:    str("CHANNEL3_API_KEY", ""),
-		Channel3BaseURL:   strings.TrimRight(str("CHANNEL3_BASE_URL", "https://api.trychannel3.com/v0"), "/"),
+		Channel3BaseURL:   strings.TrimRight(str("CHANNEL3_BASE_URL", "https://api.trychannel3.com"), "/"),
 		VestingWindow:     time.Duration(num("VESTING_WINDOW_SECONDS", 120)) * time.Second,
 		CommissionRateBps: num("COMMISSION_RATE_BPS", 800),
 		SwayFeeBps:        num("SWAY_FEE_BPS", 1500),

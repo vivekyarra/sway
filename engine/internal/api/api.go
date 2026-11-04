@@ -51,9 +51,10 @@ func (s *Server) Handler() http.Handler {
 	if s.Metrics == nil {
 		s.Metrics = newMetrics()
 	}
-	s.agentLimit = newLimiter(40, 15)   // agent runs cost LLM calls
-	s.writeLimit = newLimiter(120, 30)  // payments and admin actions
-	s.readLimit = newLimiter(1200, 200) // dashboards poll
+	k := max(1, s.Cfg.RateLimitScale)
+	s.agentLimit = newLimiter(40*k, 15*k)   // agent runs cost LLM calls
+	s.writeLimit = newLimiter(120*k, 30*k)  // payments and admin actions
+	s.readLimit = newLimiter(1200*k, 200*k) // dashboards poll
 	s.resetMu = make(chan struct{}, 1)
 
 	mux := http.NewServeMux()

@@ -76,3 +76,68 @@ jobs:
       - name: Build the single binary with the UI embedded
         working-directory: engine
         run: CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o ../sway ./cmd/sway && ls -lh ../sway
+
+  e2e:
+    name: E2E (Playwright against the real binary + Postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: sway
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: sway
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U sway" --health-interval 2s --health-timeout 5s --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: engine/go.mod
+          cache-dependency-path: engine/go.sum
+      - run: npm ci
+        working-directory: web
+      - run: npm run build && npm run embed
+        working-directory: web
+      - run: CGO_ENABLED=0 go build -o ../sway ./cmd/sway
+        working-directory: engine
+      - name: Start Sway
+        run: |
+          ./sway serve > sway.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf localhost:8080/api/health && break; sleep 1; done
+        env:
+          DATABASE_URL: postgres://sway@localhost:5432/sway?sslmode=disable
+          RATE_LIMIT_SCALE: "20"
+          AUTO_PAYOUT_SECONDS: "3"
+          VESTING_TICK_SECONDS: "2"
+      - run: npx playwright install --with-deps chromium
+        working-directory: web
+      - run: npx playwright test
+        working-directory: web
+        env:
+          CI: "true"
+      - name: Ledger still verifies after the whole suite
+        run: curl -sf localhost:8080/api/ledger/verify | tee /dev/stderr | grep -q '"ok":true'
+      - if: always()
+        run: tail -n 200 sway.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: web/playwright-report
+          retention-days: 7
+
+  docker:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build --build-arg VERSION=${{ github.sha }} -t sway:ci .

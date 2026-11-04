@@ -61,6 +61,7 @@ type Config struct {
 	VestingTick       time.Duration
 	AutoPayout        time.Duration // 0 disables automatic payout runs
 	TrustProxy        bool
+	RateLimitScale    int    // multiplies every rate limit (load tests and CI e2e); 1 in production
 	WebDir            string // optional override for UI assets (otherwise embedded)
 	AllowedOrigins    []string
 	PayPal            PayPal
@@ -139,6 +140,7 @@ func Load() (Config, error) {
 		VestingTick:       time.Duration(num("VESTING_TICK_SECONDS", 15)) * time.Second,
 		AutoPayout:        time.Duration(num("AUTO_PAYOUT_SECONDS", 30)) * time.Second,
 		TrustProxy:        boolean("TRUST_PROXY", false),
+		RateLimitScale:    clamp(num("RATE_LIMIT_SCALE", 1), 1, 1000),
 		WebDir:            str("WEB_DIR", ""),
 		AllowedOrigins:    splitList(str("ALLOWED_ORIGINS", "http://localhost:3000")),
 		PayPal: PayPal{

@@ -25,7 +25,7 @@ export const swayGridTheme = themeQuartz.withParams({
 
 export function Grid<T>({ rows, cols, height = 420, quickFilter, options }: { rows: T[]; cols: ColDef<T>[]; height?: number; quickFilter?: string; options?: GridOptions<T> }) {
   return (
-    <div style={{ height }} className="w-full">
+    <div style={{ height }} className="w-full min-w-0 max-w-full overflow-hidden">
       <AgGridReact<T>
         theme={swayGridTheme}
         rowData={rows}

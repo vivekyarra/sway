@@ -1,0 +1,9 @@
+**/node_modules
+web/.next
+web/out
+.git
+**/*.test
+playwright-report
+test-results
+engine/internal/webui/dist/*
+!engine/internal/webui/dist/.gitkeep

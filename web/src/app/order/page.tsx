@@ -113,7 +113,7 @@ function OrderView({ id }: { id: string }) {
       {msg && <div className="rounded-xl bg-paper-2 px-4 py-3 text-sm">{msg}</div>}
 
       <div className="grid gap-6 lg:grid-cols-[1.25fr_0.75fr]">
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           <section className="card p-5 sm:p-6" aria-labelledby="attr">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h2 id="attr" className="text-lg font-semibold tracking-tight">
@@ -141,7 +141,7 @@ function OrderView({ id }: { id: string }) {
             {job?.status === "FAILED" && <div className="mt-3"><ErrorBox message={`Attribution failed: ${job.error}. It will retry automatically.`} /></div>}
             {job?.status === "DONE" && (
               <>
-                <div className="mt-3 grid grid-cols-3 gap-3 text-sm">
+                <div className="mt-3 grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
                   <div className="rounded-xl bg-paper-2 p-3">
                     <div className="text-xs text-muted">Influence share</div>
                     <div className="tabular text-xl font-semibold">{pct(job.share)}</div>
@@ -198,7 +198,7 @@ function OrderView({ id }: { id: string }) {
           {job?.status === "DONE" && <CoalitionExplorer job={job} rows={o.attributions ?? []} productNames={productNames} />}
         </div>
 
-        <aside className="space-y-6">
+        <aside className="min-w-0 space-y-6">
           <section className="card p-5" aria-labelledby="money">
             <h2 id="money" className="text-lg font-semibold tracking-tight">
               Commission

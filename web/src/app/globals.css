@@ -230,3 +230,9 @@ body {
   line-height: 1.3;
   vertical-align: middle;
 }
+
+/* Grid items default to min-width:auto and grow to fit long unbreakable content (IDs, hashes).
+   Let every grid item shrink so truncation works and nothing widens the page on phones. */
+.grid > * {
+  min-width: 0;
+}

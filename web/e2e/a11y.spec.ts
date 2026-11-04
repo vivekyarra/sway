@@ -10,6 +10,9 @@ for (const path of ["/", "/shop/", "/order/?id=ord_seed_01", "/creator/?id=c_pri
       await page.getByRole("button", { name: "Ask agent" }).click();
       await expect(page.getByText("Why I chose this")).toBeVisible();
     }
+    // Measure the settled page: entrance animations fade content in, and mid-fade contrast is not what users read.
+    await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished.catch(() => undefined))));
+    await page.waitForTimeout(300);
     const results = await new AxeBuilder({ page })
       .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
       .exclude(".ag-root-wrapper") // third-party grid internals; grid content is covered by its own a11y support

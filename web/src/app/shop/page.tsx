@@ -210,8 +210,8 @@ function Shop() {
                 const chosen = stage >= 3 && p.id === decision.chosen.id;
                 const over = decision.budget_cents > 0 && p.price_cents > decision.budget_cents;
                 return (
-                  <div key={p.id} className={`card rise p-3 transition ${chosen ? "ring-2 ring-accent" : stage >= 3 ? "opacity-70" : ""}`}>
-                    <ProductArt id={p.id} category={p.category} imageUrl={p.image_url} className="h-24 w-full" />
+                  <div key={p.id} className={`card rise p-3 transition ${chosen ? "ring-2 ring-accent" : ""}`}>
+                    <ProductArt id={p.id} category={p.category} imageUrl={p.image_url} className={`h-24 w-full transition ${stage >= 3 && !chosen ? "opacity-50 grayscale" : ""}`} />
                     <div className="mt-2 flex items-start justify-between gap-2">
                       <div>
                         <div className="font-semibold">{p.name}</div>

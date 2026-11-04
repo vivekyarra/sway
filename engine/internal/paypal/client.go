@@ -188,6 +188,8 @@ type amount struct {
 	Value        string `json:"value"`
 }
 
+// CreateOrder follows PayPal's standard JS SDK integration: intent + purchase_units only, so the buttons
+// drive the payer experience and the order is returned in CREATED state.
 func (c *Client) CreateOrder(ctx context.Context, r CreateOrderRequest) (Order, error) {
 	body := map[string]any{
 		"intent": "CAPTURE",
@@ -197,9 +199,6 @@ func (c *Client) CreateOrder(ctx context.Context, r CreateOrderRequest) (Order, 
 			"description":  truncate(r.Description, 127),
 			"amount":       amount{"USD", money.Format(r.AmountCents)},
 		}},
-		"payment_source": map[string]any{"paypal": map[string]any{"experience_context": map[string]any{
-			"shipping_preference": "NO_SHIPPING", "user_action": "PAY_NOW", "brand_name": "Sway demo store",
-		}}},
 	}
 	var resp struct {
 		ID     string `json:"id"`

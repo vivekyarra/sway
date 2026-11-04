@@ -48,6 +48,9 @@ func (m *mock) server(t *testing.T) *httptest.Server {
 			if pu["amount"].(map[string]any)["value"] != "229.00" {
 				t.Errorf("amount not formatted: %v", pu["amount"])
 			}
+			if r.Header.Get("PayPal-Request-Id") == "ord_1" && (req["intent"] != "CAPTURE" || req["payment_source"] != nil || pu["reference_id"] != "ord_1" || pu["custom_id"] != "dec_1") {
+				t.Errorf("order body must match the standard JS SDK integration: %v", req)
+			}
 			_, _ = io.WriteString(w, `{"id":"5O190127TN364715T","status":"CREATED","links":[{"rel":"payer-action","href":"https://sandbox.paypal.com/checkoutnow?token=5O1"}]}`)
 		case strings.HasSuffix(r.URL.Path, "/capture"):
 			m.captures.Add(1)

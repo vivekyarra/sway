@@ -220,21 +220,31 @@ type Verification struct {
 
 // Verify recomputes every hash in order. Any edited, inserted or deleted entry breaks the chain.
 func Verify(ctx context.Context, q db.Q) (Verification, error) {
+	v, _, err := VerifyAfter(ctx, q, 0, GenesisHash)
+	return v, err
+}
+
+// VerifyAfter verifies only entries with seq > afterSeq, which must link to prevHash (the hash of entry afterSeq).
+// Because the chain is append-only, verifying the tail incrementally is equivalent to a full walk for new entries.
+// It returns the verification (Entries counts only the tail) and the last seq checked.
+func VerifyAfter(ctx context.Context, q db.Q, afterSeq int64, prevHash string) (Verification, int64, error) {
 	rows, err := q.Query(ctx, `SELECT seq, id, idem_key, type, COALESCE(order_id,''), COALESCE(creator_id,''), from_account, to_account,
-		amount_cents, signed_cents, ref, memo, simulated, prev_hash, hash, created_at FROM ledger_entries ORDER BY seq`)
+		amount_cents, signed_cents, ref, memo, simulated, prev_hash, hash, created_at FROM ledger_entries WHERE seq > $1 ORDER BY seq`, afterSeq)
 	if err != nil {
-		return Verification{}, err
+		return Verification{}, afterSeq, err
 	}
 	defer rows.Close()
-	v := Verification{OK: true, Head: GenesisHash}
-	prev := GenesisHash
+	v := Verification{OK: true, Head: prevHash}
+	prev := prevHash
+	last := afterSeq
 	for rows.Next() {
 		var e Entry
 		if err := rows.Scan(&e.Seq, &e.ID, &e.IdemKey, &e.Type, &e.OrderID, &e.CreatorID, &e.From, &e.To, &e.Amount, &e.Signed,
 			&e.Ref, &e.Memo, &e.Simulated, &e.PrevHash, &e.Hash, &e.CreatedAt); err != nil {
-			return v, err
+			return v, last, err
 		}
 		v.Entries++
+		last = e.Seq
 		if v.OK {
 			if e.PrevHash != prev {
 				v.OK, v.BrokenAtSeq, v.Problem = false, e.Seq, "prev_hash does not link to the previous entry"
@@ -245,17 +255,17 @@ func Verify(ctx context.Context, q db.Q) (Verification, error) {
 		prev = e.Hash
 	}
 	if err := rows.Err(); err != nil {
-		return v, err
+		return v, last, err
 	}
 	v.Head = prev
 	// Double-entry: every amount leaves one account and enters another, so the global sum is zero.
 	var total int64
 	if err := q.QueryRow(ctx, `SELECT COALESCE(SUM(d),0)::bigint FROM (
 		SELECT amount_cents d FROM ledger_entries UNION ALL SELECT -amount_cents FROM ledger_entries) x`).Scan(&total); err != nil {
-		return v, err
+		return v, last, err
 	}
 	v.TrialZero = total == 0
-	return v, nil
+	return v, last, nil
 }
 
 // Balances maps account -> balance (cents).

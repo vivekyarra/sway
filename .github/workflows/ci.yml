@@ -114,7 +114,7 @@ jobs:
           for i in $(seq 1 60); do curl -sf localhost:8080/api/health && break; sleep 1; done
         env:
           DATABASE_URL: postgres://sway@localhost:5432/sway?sslmode=disable
-          RATE_LIMIT_SCALE: "20"
+          RATE_LIMIT_SCALE: "1000"
           AUTO_PAYOUT_SECONDS: "3"
           VESTING_TICK_SECONDS: "2"
       - run: npx playwright install --with-deps chromium
@@ -123,6 +123,9 @@ jobs:
         working-directory: web
         env:
           CI: "true"
+      - name: Load test (64 concurrent shoppers, 600 purchases; books must balance)
+        working-directory: engine
+        run: go run ./cmd/swayload -url http://localhost:8080 -shoppers 64 -orders 600 -refund-rate 0.3
       - name: Ledger still verifies after the whole suite
         run: curl -sf localhost:8080/api/ledger/verify | tee /dev/stderr | grep -q '"ok":true'
       - if: always()

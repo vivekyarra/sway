@@ -28,9 +28,9 @@ func (Sim) Model() string { return "sway-sim-v1" }
 // needLexicon maps aspect -> request term -> weight. A need's weight is the max of its matched terms.
 var needLexicon = map[string]map[string]float64{
 	"anc":         {"noise-cancel": 1, "noise cancel": 1, "anc": 1, "cancelling": 1, "quiet flight": 1},
-	"comfort":     {"comfort": 1.5, "long-haul": 1.5, "long haul": 1.5, "long flight": 1.5, "all day": 1, "all-day": 1, "hours": 1},
-	"battery":     {"battery": 1, "long-haul": 0.5, "long haul": 0.5, "long flight": 0.5},
-	"portability": {"travel": 1, "flight": 1, "commute": 1, "compact": 1, "portable": 1, "trips": 1},
+	"comfort":     {"comfort": 1.5, "long-haul": 1.5, "long haul": 1.5, "long flight": 1.5, "hour": 1.5, "all day": 1, "all-day": 1, "red-eye": 1.5},
+	"battery":     {"battery": 1, "long-haul": 0.5, "long haul": 0.5, "long flight": 0.5, "hour": 0.5},
+	"portability": {"travel": 1, "flight": 1, "fly": 1, "flying": 1, "commute": 1, "compact": 1, "portable": 1, "trips": 1},
 	"weight":      {"light": 1, "lightweight": 1},
 	"durability":  {"survive": 1.5, "durable": 1.5, "rough": 1.5, "sturdy": 1, "tough": 1.5},
 	"capacity":    {"pack": 1, "space": 1, "capacity": 1, "week": 1},

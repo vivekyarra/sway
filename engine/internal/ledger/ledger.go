@@ -13,6 +13,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -51,6 +52,16 @@ const (
 	MerchantReturned  = "merchant:returned"  // commission not earned by content (influence share < 100%)
 	MerchantRecovered = "merchant:recovered" // forfeits and clawbacks flowing back to the merchant
 )
+
+// nonNegative accounts can never hold a negative balance within their (creator, order) scope.
+// merchant:funding, merchant:* and creator:owed are the only accounts allowed below zero.
+var nonNegative = map[string]bool{
+	OrderCommission: true, CreatorPending: true, CreatorFrozen: true, CreatorVested: true, CreatorPaid: true,
+	SwayPending: true, SwayFrozen: true, SwayVested: true,
+}
+
+// ErrOverdraft is returned when an entry would take a non-negative account below zero.
+var ErrOverdraft = errors.New("ledger: entry would overdraw an account")
 
 // Entry is one movement of money.
 type Entry struct {
@@ -158,8 +169,41 @@ func Post(ctx context.Context, q db.Q, entries ...Entry) ([]Entry, error) {
 		}
 		prev = e.Hash
 		written = append(written, e)
+		if nonNegative[e.From] {
+			// creator:* balances are scoped to (order, creator); order:commission and sway:* to the order.
+			creatorScope := e.CreatorID
+			if !strings.HasPrefix(e.From, "creator:") {
+				creatorScope = "*"
+			}
+			var bal int64
+			if err := q.QueryRow(ctx, `SELECT COALESCE(SUM(CASE WHEN to_account=$1 THEN amount_cents ELSE -amount_cents END),0)::bigint
+				FROM ledger_entries WHERE (to_account=$1 OR from_account=$1) AND COALESCE(order_id,'')=$2 AND ($3='*' OR COALESCE(creator_id,'')=$3)`,
+				e.From, e.OrderID, creatorScope).Scan(&bal); err != nil {
+				return nil, err
+			}
+			if bal < 0 {
+				return nil, fmt.Errorf("%w: %s for order %q creator %q would be %d (%s)", ErrOverdraft, e.From, e.OrderID, e.CreatorID, bal, e.IdemKey)
+			}
+		}
 	}
 	return written, nil
+}
+
+// LockOrders takes row locks on orders in a fixed (sorted) order. Every transaction that moves an order's
+// money locks its orders first and only then posts to the ledger, so lock order is always
+// orders (ascending) -> ledger, which rules out deadlocks between payouts, refunds, disputes and vesting.
+func LockOrders(ctx context.Context, q db.Q, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	sorted := append([]string(nil), ids...)
+	sort.Strings(sorted)
+	rows, err := q.Query(ctx, `SELECT id FROM orders WHERE id = ANY($1) ORDER BY id FOR UPDATE`, sorted)
+	if err != nil {
+		return err
+	}
+	rows.Close()
+	return rows.Err()
 }
 
 func isNoRows(err error) bool { return err != nil && strings.Contains(err.Error(), "no rows") }

@@ -210,7 +210,7 @@ export default function ShopPage() {
           )}
 
           {stage >= 3 && (
-            <div className="grid items-start gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+            <div className="grid items-start gap-6 lg:grid-cols-[0.9fr_1.1fr] [&>*]:min-w-0">
               <section aria-label="The agent's pick" className="card rise overflow-hidden lg:sticky lg:top-20">
                 <div className="bg-ink px-5 py-3 text-sm text-white/80">
                   The agent picked <span className="font-semibold text-white">{decision.chosen.name}</span> · {pct(chosenProb)} confident

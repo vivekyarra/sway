@@ -328,6 +328,9 @@ func (r *Runner) run(ctx context.Context, orderID string) error {
 
 	// 7. One transaction: attributions + ledger + job status. All or nothing.
 	err = r.DB.Tx(ctx, func(q db.Q) error {
+		if err := ledger.LockOrders(ctx, q, []string{orderID}); err != nil {
+			return err
+		}
 		var done bool
 		if err := q.QueryRow(ctx, `SELECT status='DONE' FROM attribution_jobs WHERE order_id=$1 FOR UPDATE`, orderID).Scan(&done); err != nil {
 			return err

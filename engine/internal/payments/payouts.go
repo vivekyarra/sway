@@ -41,11 +41,30 @@ func (s *Service) RunPayouts(ctx context.Context, mode string) (PayoutPlan, erro
 		if _, err := q.Exec(ctx, `SELECT pg_advisory_xact_lock(515151)`); err != nil {
 			return err
 		}
+		// Lock every order that may hold vested money (sorted, before any ledger write), then read balances
+		// only for those orders: a concurrent dispute or refund cannot move money we are about to pay out.
+		var candidates []string
+		crow, err := q.Query(ctx, `SELECT DISTINCT order_id FROM ledger_entries WHERE to_account=$1 AND order_id IS NOT NULL`, ledger.CreatorVested)
+		if err != nil {
+			return err
+		}
+		for crow.Next() {
+			var id string
+			if err := crow.Scan(&id); err != nil {
+				crow.Close()
+				return err
+			}
+			candidates = append(candidates, id)
+		}
+		crow.Close()
+		if err := ledger.LockOrders(ctx, q, candidates); err != nil {
+			return err
+		}
 		// Per (creator, order) vested balances.
 		rows, err := q.Query(ctx, `SELECT creator_id, order_id, SUM(delta)::bigint FROM (
-			SELECT creator_id, order_id, amount_cents AS delta FROM ledger_entries WHERE to_account=$1 AND creator_id IS NOT NULL
-			UNION ALL SELECT creator_id, order_id, -amount_cents FROM ledger_entries WHERE from_account=$1 AND creator_id IS NOT NULL) x
-			GROUP BY creator_id, order_id HAVING SUM(delta) > 0 ORDER BY creator_id, order_id`, ledger.CreatorVested)
+			SELECT creator_id, order_id, amount_cents AS delta FROM ledger_entries WHERE to_account=$1 AND creator_id IS NOT NULL AND order_id = ANY($2)
+			UNION ALL SELECT creator_id, order_id, -amount_cents FROM ledger_entries WHERE from_account=$1 AND creator_id IS NOT NULL AND order_id = ANY($2)) x
+			GROUP BY creator_id, order_id HAVING SUM(delta) > 0 ORDER BY creator_id, order_id`, ledger.CreatorVested, candidates)
 		if err != nil {
 			return err
 		}
@@ -286,6 +305,7 @@ func (s *Service) reverseItem(ctx context.Context, q db.Q, itemID string) error 
 		sim            bool
 	}
 	var ss []sent
+	var orders []string
 	for rows.Next() {
 		var x sent
 		if err := rows.Scan(&x.order, &x.creator, &x.amt, &x.sim); err != nil {
@@ -293,8 +313,12 @@ func (s *Service) reverseItem(ctx context.Context, q db.Q, itemID string) error 
 			return err
 		}
 		ss = append(ss, x)
+		orders = append(orders, x.order)
 	}
 	rows.Close()
+	if err := ledger.LockOrders(ctx, q, orders); err != nil {
+		return err
+	}
 	var entries []ledger.Entry
 	for _, x := range ss {
 		entries = append(entries, ledger.Entry{Type: ledger.PayoutFailedReversal, OrderID: x.order, CreatorID: x.creator, From: ledger.CreatorPaid, To: ledger.CreatorVested,

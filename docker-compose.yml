@@ -1,0 +1,33 @@
+# One command, no keys needed:  docker compose up --build   then open http://localhost:8080
+# Add PayPal sandbox and Anthropic keys in a .env file (see .env.example) to switch from simulators to the real APIs.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: sway
+      POSTGRES_PASSWORD: sway
+      POSTGRES_DB: sway
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sway"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    volumes:
+      - sway-db:/var/lib/postgresql/data
+
+  sway:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgres://sway:sway@db:5432/sway?sslmode=disable
+      WORKER_INLINE: "true"
+    ports:
+      - "8080:8080"
+
+volumes:
+  sway-db:

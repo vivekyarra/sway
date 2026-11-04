@@ -1,0 +1,56 @@
+# Render Blueprint: web service (API + UI), background worker, managed Postgres.
+# New > Blueprint > pick this repo. Fill the "sync: false" secrets in the dashboard (optional: without them Sway
+# runs its labelled PayPal simulator and offline agent). Register the PayPal webhook at
+# https://<service>.onrender.com/api/webhooks/paypal and paste its id into PAYPAL_WEBHOOK_ID.
+databases:
+  - name: sway-db
+    databaseName: sway
+    user: sway
+    plan: basic-256mb
+
+services:
+  - type: web
+    name: sway
+    runtime: docker
+    plan: starter
+    healthCheckPath: /api/health
+    envVars: &env
+      - key: DATABASE_URL
+        fromDatabase:
+          name: sway-db
+          property: connectionString
+      - key: WORKER_INLINE
+        value: "false"
+      - key: TRUST_PROXY
+        value: "true"
+      - key: DEMO_MODE
+        value: "true"
+      - key: VESTING_WINDOW_SECONDS
+        value: "120"
+      - key: PAYPAL_ENV
+        value: sandbox
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false
+      - key: PAYPAL_SANDBOX_BUYER_EMAIL
+        sync: false
+      - key: PAYPAL_SANDBOX_BUYER_PASSWORD
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: DECISION_MODEL
+        value: claude-haiku-5-5
+      - key: EXPLAIN_MODEL
+        value: claude-haiku-5-5
+      - key: CHANNEL3_API_KEY
+        sync: false
+
+  - type: worker
+    name: sway-worker
+    runtime: docker
+    plan: starter
+    dockerCommand: /sway worker
+    envVars: *env

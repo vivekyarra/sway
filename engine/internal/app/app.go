@@ -94,17 +94,33 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error)
 	a.Worker = &jobs.Worker{DB: d, Handlers: handlers, Concurrency: 4, Poll: cfg.WorkerPoll, Log: log}
 	a.Pay.Wake = a.Worker.Wake
 
-	seeded, err := demo.Seeded(ctx, d)
-	if err != nil {
+	if err := a.bootstrap(ctx); err != nil {
 		return nil, err
 	}
-	if !seeded {
-		log.Info("empty database: installing demo world and seeded history")
-		if err := a.Demo.Install(ctx, a.Classifier); err != nil {
-			return nil, fmt.Errorf("bootstrap demo: %w", err)
-		}
-	}
 	return a, nil
+}
+
+// bootstrap installs the demo world on an empty database. The web service and the worker may start at the
+// same moment (Render), so a session advisory lock makes exactly one of them do it.
+func (a *App) bootstrap(ctx context.Context) error {
+	conn, err := a.DB.Pool.Acquire(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+	if _, err := conn.Exec(ctx, `SELECT pg_advisory_lock(818181)`); err != nil {
+		return err
+	}
+	defer func() { _, _ = conn.Exec(context.WithoutCancel(ctx), `SELECT pg_advisory_unlock(818181)`) }()
+	seeded, err := demo.Seeded(ctx, a.DB)
+	if err != nil || seeded {
+		return err
+	}
+	a.Log.Info("empty database: installing demo world and seeded history")
+	if err := a.Demo.Install(ctx, a.Classifier); err != nil {
+		return fmt.Errorf("bootstrap demo: %w", err)
+	}
+	return nil
 }
 
 // HTTPHandler returns the API plus the embedded UI.

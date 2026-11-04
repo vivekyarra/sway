@@ -2,6 +2,7 @@ package payments_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/vivekyarra/sway/engine/internal/ledger"
@@ -48,7 +49,18 @@ func checkBooks(t *testing.T, m *testkit.Money) {
 	for _, id := range ids {
 		s, err := ledger.SummarizeOrder(ctx, m.DB.Pool, id)
 		if err != nil || !s.Balanced {
-			t.Fatalf("order %s unbalanced: %+v %v", id, s, err)
+			var jobErrs []string
+			jr, _ := m.DB.Pool.Query(ctx, `SELECT type, status, attempts, last_error FROM jobs WHERE status <> 'DONE'`)
+			for jr.Next() {
+				var typ, st, le string
+				var at int
+				_ = jr.Scan(&typ, &st, &at, &le)
+				jobErrs = append(jobErrs, fmt.Sprintf("%s/%s/%d: %s", typ, st, at, le))
+			}
+			jr.Close()
+			var attErr string
+			_ = m.DB.Pool.QueryRow(ctx, `SELECT status || ': ' || error FROM attribution_jobs WHERE order_id=$1`, id).Scan(&attErr)
+			t.Fatalf("order %s unbalanced: %+v %v; attribution %q; open jobs %v", id, s, err, attErr, jobErrs)
 		}
 		pc, _ := ledger.OrderCreatorBalances(ctx, m.DB.Pool, id)
 		for c, b := range pc {

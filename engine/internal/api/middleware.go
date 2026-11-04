@@ -117,7 +117,7 @@ func (s *Server) withSecurityHeaders(next http.Handler) http.Handler {
 		"script-src 'self' 'unsafe-inline' https://www.paypal.com https://*.paypal.com https://*.paypalobjects.com",
 		"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
 		"font-src 'self' https://fonts.gstatic.com data:",
-		"img-src 'self' data: https://*.paypal.com https://*.paypalobjects.com",
+		"img-src 'self' data: https:", // live-catalog product photos come from many merchant CDNs
 		"connect-src 'self' https://*.paypal.com https://*.paypalobjects.com",
 		"frame-src https://*.paypal.com https://*.paypalobjects.com",
 		"frame-ancestors 'none'",

@@ -17,6 +17,7 @@ import (
 	"github.com/vivekyarra/sway/engine/internal/db"
 	"github.com/vivekyarra/sway/engine/internal/demo"
 	"github.com/vivekyarra/sway/engine/internal/ledger"
+	"github.com/vivekyarra/sway/engine/internal/mcp"
 	"github.com/vivekyarra/sway/engine/internal/payments"
 	"github.com/vivekyarra/sway/engine/internal/screening"
 	"github.com/vivekyarra/sway/engine/internal/shop"
@@ -80,6 +81,9 @@ func (s *Server) Handler() http.Handler {
 	r("POST /api/demo/fast-forward", s.writeLimit, post(s.demoOnly(s.fastForward)))
 	r("POST /api/demo/reset", s.writeLimit, post(s.demoOnly(s.reset)))
 	r("GET /api/ledger/verify", s.readLimit, s.verifyLedger)
+	mcpServer := &mcp.Server{Shop: s.Shop, DB: s.DB, PublicBaseURL: s.Cfg.PublicBaseURL, Version: s.Version, AllowedOrigins: s.Cfg.AllowedOrigins}
+	mux.HandleFunc("POST /mcp", s.rateLimit(s.agentLimit, limitBody(64<<10, mcpServer.ServeHTTP)))
+	mux.HandleFunc("GET /mcp", mcpServer.ServeHTTP)
 	mux.HandleFunc("GET /metrics", s.metrics)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "No such API route")

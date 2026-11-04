@@ -12,7 +12,12 @@ const hues: Record<string, number> = {
   p_kavari_duo: 330,
 };
 
-export function ProductArt({ id, category, className = "" }: { id: string; category: string; className?: string }) {
+export function ProductArt({ id, category, className = "", imageUrl }: { id: string; category: string; className?: string; imageUrl?: string }) {
+  if (imageUrl && /^https:\/\//.test(imageUrl)) {
+    // Live catalog (Channel3) products have real photos.
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={imageUrl} alt="" className={`${className} rounded-[14px] bg-white object-contain`} loading="lazy" />;
+  }
   const h = hues[id] ?? 250;
   const main = `hsl(${h} 55% 46%)`;
   const dark = `hsl(${h} 45% 28%)`;

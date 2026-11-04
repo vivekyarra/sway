@@ -106,3 +106,17 @@ test("every page fits a phone without horizontal scrolling", async ({ browser })
   }
   await ctx.close();
 });
+
+// An external agent shops over MCP and hands the human a checkout link that opens the same decision.
+test("MCP agent handoff to PayPal checkout", async ({ page, request }) => {
+  const res = await request.post("/mcp", {
+    data: { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "shop_recommend", arguments: { request: "Noise-cancelling headphones for long-haul flights to Seoul, under $250" } } },
+  });
+  expect(res.ok()).toBeTruthy();
+  const body = await res.json();
+  const url = new URL(body.result.structuredContent.checkout_url);
+  await page.goto(url.pathname + url.search);
+  await expect(page.getByText(/Handed over by your AI agent/)).toBeVisible();
+  await expect(page.getByText(/The agent picked Halvo Q7/)).toBeVisible();
+  await buy(page);
+});

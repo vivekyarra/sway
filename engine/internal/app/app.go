@@ -1,0 +1,172 @@
+// Package app wires configuration into running services: database, agent, payments, jobs, HTTP.
+package app
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"sync"
+	"time"
+
+	"github.com/vivekyarra/sway/engine/internal/agent"
+	"github.com/vivekyarra/sway/engine/internal/api"
+	"github.com/vivekyarra/sway/engine/internal/attribution"
+	"github.com/vivekyarra/sway/engine/internal/catalog"
+	"github.com/vivekyarra/sway/engine/internal/config"
+	"github.com/vivekyarra/sway/engine/internal/db"
+	"github.com/vivekyarra/sway/engine/internal/demo"
+	"github.com/vivekyarra/sway/engine/internal/jobs"
+	"github.com/vivekyarra/sway/engine/internal/payments"
+	"github.com/vivekyarra/sway/engine/internal/paypal"
+	"github.com/vivekyarra/sway/engine/internal/screening"
+	"github.com/vivekyarra/sway/engine/internal/seed"
+	"github.com/vivekyarra/sway/engine/internal/shop"
+	"github.com/vivekyarra/sway/engine/internal/webui"
+)
+
+// Version is set at build time (-ldflags "-X .../app.Version=...").
+var Version = "dev"
+
+type App struct {
+	Cfg        config.Config
+	Log        *slog.Logger
+	DB         *db.DB
+	Agent      *agent.Agent
+	Shop       *shop.Service
+	Pay        *payments.Service
+	Attr       *attribution.Runner
+	Demo       *demo.Builder
+	Worker     *jobs.Worker
+	Classifier screening.Classifier
+}
+
+// New builds every service. It migrates the schema and, on an empty database, installs the demo world.
+func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error) {
+	d, err := db.Open(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return nil, err
+	}
+	if err := d.Migrate(ctx); err != nil {
+		d.Close()
+		return nil, fmt.Errorf("migrate: %w", err)
+	}
+	a := &App{Cfg: cfg, Log: log, DB: d}
+
+	var engine agent.Engine = agent.Sim{}
+	var claude *agent.Claude
+	if cfg.LLM.Mode == "claude" {
+		claude = agent.NewClaude(cfg.LLM.APIKey, cfg.LLM.BaseURL, cfg.LLM.DecisionModel, cfg.LLM.ExplainModel, cfg.LLM.Timeout)
+		engine = claude
+		a.Classifier = claude
+	}
+	a.Agent = agent.New(d, engine, cfg.LLM.Concurrency, cfg.Attribution.Tau)
+
+	var provider paypal.Provider
+	if cfg.PayPal.Mode == "sandbox" {
+		provider = paypal.NewClient(cfg.PayPal.BaseURL, cfg.PayPal.ClientID, cfg.PayPal.ClientSecret, cfg.PayPal.WebhookID)
+	} else {
+		provider = &paypal.Sim{DB: d, SettleAfter: 4 * time.Second}
+	}
+
+	w, err := seed.Load()
+	if err != nil {
+		return nil, err
+	}
+	a.Shop = &shop.Service{DB: d, Agent: a.Agent, Categories: w.Categories, Samples: cfg.Attribution.Samples, MaxSources: cfg.Attribution.MaxSources}
+	a.Pay = &payments.Service{DB: d, PP: provider, Cfg: cfg, Log: log}
+	a.Attr = &attribution.Runner{DB: d, Agent: a.Agent, Shop: a.Shop, Cfg: cfg.Attribution, Log: log, AfterAllocate: a.Pay.Reconcile}
+	if claude != nil {
+		a.Attr.Explainer = claude
+	}
+	a.Demo = &demo.Builder{DB: d, Cfg: cfg, World: w, Pay: a.Pay, Log: log}
+
+	handlers := a.Pay.JobHandlers()
+	handlers[jobs.TypeAttribution] = func(ctx context.Context, j jobs.Job) error {
+		var p struct {
+			OrderID string `json:"order_id"`
+		}
+		if err := json.Unmarshal(j.Payload, &p); err != nil {
+			return err
+		}
+		return a.Attr.Run(ctx, p.OrderID)
+	}
+	a.Worker = &jobs.Worker{DB: d, Handlers: handlers, Concurrency: 4, Poll: cfg.WorkerPoll, Log: log}
+	a.Pay.Wake = a.Worker.Wake
+
+	seeded, err := demo.Seeded(ctx, d)
+	if err != nil {
+		return nil, err
+	}
+	if !seeded {
+		log.Info("empty database: installing demo world and seeded history")
+		if err := a.Demo.Install(ctx, a.Classifier); err != nil {
+			return nil, fmt.Errorf("bootstrap demo: %w", err)
+		}
+	}
+	return a, nil
+}
+
+// HTTPHandler returns the API plus the embedded UI.
+func (a *App) HTTPHandler() *api.Server {
+	return &api.Server{
+		Cfg: a.Cfg, DB: a.DB, Log: a.Log, Agent: a.Agent, Shop: a.Shop, Pay: a.Pay, Demo: a.Demo, Classifier: a.Classifier,
+		Web: webui.Handler(a.Cfg.WebDir), TrustProxy: a.Cfg.TrustProxy, Version: Version,
+	}
+}
+
+// RunBackground runs the job worker and periodic tasks until ctx ends, then waits for them to stop.
+func (a *App) RunBackground(ctx context.Context) {
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() { defer wg.Done(); a.Worker.Run(ctx) }()
+	every := func(name string, d time.Duration, fn func(context.Context) error) {
+		if d <= 0 {
+			return
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			t := time.NewTicker(d)
+			defer t.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-t.C:
+					if err := fn(ctx); err != nil && ctx.Err() == nil {
+						a.Log.Error("periodic task failed", "task", name, "err", err)
+					}
+				}
+			}
+		}()
+	}
+	every("vesting", a.Cfg.VestingTick, func(ctx context.Context) error {
+		n, err := a.Pay.VestDue(ctx)
+		if n > 0 {
+			a.Log.Info("vested orders", "count", n)
+		}
+		return err
+	})
+	every("payouts", a.Cfg.AutoPayout, func(ctx context.Context) error {
+		plan, err := a.Pay.RunPayouts(ctx, "")
+		if plan.Items > 0 {
+			a.Log.Info("payout batch created", "batch", plan.BatchID, "items", plan.Items, "total_cents", plan.TotalCents)
+		}
+		return err
+	})
+	every("housekeeping", time.Hour, func(ctx context.Context) error {
+		_, err := a.DB.Pool.Exec(ctx, `DELETE FROM idempotency_keys WHERE created_at < now() - interval '24 hours'`)
+		if err == nil {
+			_, err = a.DB.Pool.Exec(ctx, `DELETE FROM jobs WHERE status='DONE' AND updated_at < now() - interval '7 days'`)
+		}
+		return err
+	})
+	wg.Wait()
+}
+
+// Close releases resources.
+func (a *App) Close() { a.DB.Close() }
+
+// Categories exposes catalog categories (used by tooling).
+func (a *App) Categories() map[string]catalog.CategoryDef { return a.Shop.Categories }

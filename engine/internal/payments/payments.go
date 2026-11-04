@@ -231,7 +231,7 @@ func (s *Service) Refund(ctx context.Context, orderID string, amount int64, reas
 		amount = remaining
 	}
 	if amount <= 0 || amount > remaining {
-		return RefundResult{}, fmt.Errorf("%w: refund must be between $0.01 and %s", ErrInvalid, money.Format(remaining))
+		return RefundResult{}, fmt.Errorf("%w: refund must be between $0.01 and $%s", ErrInvalid, money.Format(remaining))
 	}
 	if seeded || captureID == nil {
 		// Seeded history has no real PayPal capture: book the refund locally, clearly labelled.

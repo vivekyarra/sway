@@ -47,3 +47,32 @@ jobs:
         env:
           SWAY_STRESS: "1"
       - run: go build -trimpath ./...
+
+  web:
+    name: Web (Next.js) — typecheck, lint, build, embed into the binary
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: engine/go.mod
+          cache-dependency-path: engine/go.sum
+      - run: npm ci
+        working-directory: web
+      - run: npm run typecheck
+        working-directory: web
+      - run: npm run lint
+        working-directory: web
+      - run: npm run build
+        working-directory: web
+      - run: npm run embed
+        working-directory: web
+      - name: Build the single binary with the UI embedded
+        working-directory: engine
+        run: CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o ../sway ./cmd/sway && ls -lh ../sway

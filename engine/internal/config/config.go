@@ -59,6 +59,8 @@ type Config struct {
 	WorkerInline      bool
 	WorkerPoll        time.Duration
 	VestingTick       time.Duration
+	AutoPayout        time.Duration // 0 disables automatic payout runs
+	TrustProxy        bool
 	WebDir            string // optional override for UI assets (otherwise embedded)
 	AllowedOrigins    []string
 	PayPal            PayPal
@@ -135,6 +137,8 @@ func Load() (Config, error) {
 		WorkerInline:      boolean("WORKER_INLINE", true),
 		WorkerPoll:        time.Duration(num("WORKER_POLL_MS", 500)) * time.Millisecond,
 		VestingTick:       time.Duration(num("VESTING_TICK_SECONDS", 15)) * time.Second,
+		AutoPayout:        time.Duration(num("AUTO_PAYOUT_SECONDS", 30)) * time.Second,
+		TrustProxy:        boolean("TRUST_PROXY", false),
 		WebDir:            str("WEB_DIR", ""),
 		AllowedOrigins:    splitList(str("ALLOWED_ORIGINS", "http://localhost:3000")),
 		PayPal: PayPal{

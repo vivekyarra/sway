@@ -12,3 +12,6 @@ next-env.d.ts
 .env.*.local
 .DS_Store
 npm-debug.log*
+engine/internal/webui/dist/*
+!engine/internal/webui/dist/.gitkeep
+web/node_modules/

@@ -163,3 +163,28 @@ func TestRejectsMalformed(t *testing.T) {
 		t.Fatal("negative amount must be rejected")
 	}
 }
+
+// Defense in depth: no entry may take a creator or commission account below zero, whatever the caller computed.
+func TestOverdraftRefused(t *testing.T) {
+	d := testdb.New(t)
+	seed(t, d)
+	post(t, d,
+		ledger.Entry{Type: ledger.CommissionReserved, OrderID: "o1", From: ledger.MerchantFunding, To: ledger.OrderCommission, Amount: 100, IdemKey: "r"},
+		ledger.Entry{Type: ledger.AccruePending, OrderID: "o1", CreatorID: "c1", From: ledger.OrderCommission, To: ledger.CreatorPending, Amount: 60, IdemKey: "a"},
+	)
+	try := func(e ledger.Entry) error {
+		return d.Tx(context.Background(), func(q db.Q) error { _, err := ledger.Post(context.Background(), q, e); return err })
+	}
+	if err := try(ledger.Entry{Type: ledger.AccruePending, OrderID: "o1", CreatorID: "c2", From: ledger.OrderCommission, To: ledger.CreatorPending, Amount: 41, IdemKey: "b"}); err == nil {
+		t.Fatal("over-distributing the commission must be refused")
+	}
+	if err := try(ledger.Entry{Type: ledger.Vest, OrderID: "o1", CreatorID: "c1", From: ledger.CreatorPending, To: ledger.CreatorVested, Amount: 61, IdemKey: "v"}); err == nil {
+		t.Fatal("vesting more than pending must be refused")
+	}
+	if err := try(ledger.Entry{Type: ledger.AccruePending, OrderID: "o1", CreatorID: "c2", From: ledger.OrderCommission, To: ledger.CreatorPending, Amount: 40, IdemKey: "c"}); err != nil {
+		t.Fatalf("exact distribution must pass: %v", err)
+	}
+	if v, _ := ledger.Verify(context.Background(), d.Pool); !v.OK || v.Entries != 3 {
+		t.Fatalf("refused entries must leave no trace: %+v", v)
+	}
+}

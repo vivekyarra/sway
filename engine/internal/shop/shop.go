@@ -23,7 +23,7 @@ type Service struct {
 	Categories map[string]catalog.CategoryDef
 	Samples    int
 	MaxSources int
-	Live       LiveCatalog // optional (Channel3); nil in demo mode
+	Live       LiveCatalog // optional (Channel3); nil in curated mode
 }
 
 // LiveCatalog imports real products for a request (Channel3 adapter).
@@ -38,7 +38,7 @@ var ErrUnsupported = errors.New("unsupported request")
 type UnsupportedError struct{ Suggestions []string }
 
 func (e *UnsupportedError) Error() string {
-	return "I can shop " + strings.Join(e.Suggestions, ", ") + " in the demo catalog."
+	return "I can shop " + strings.Join(e.Suggestions, ", ") + " in the Sway catalog."
 }
 func (e *UnsupportedError) Unwrap() error { return ErrUnsupported }
 
@@ -85,7 +85,7 @@ func newID(prefix string) string {
 	return prefix + hex.EncodeToString(b[:])
 }
 
-// Decide runs retrieval and the full-source decision for a shopping request (spec 5.3 step 1).
+// Decide runs retrieval and the full-source decision for a shopping request.
 func (s *Service) Decide(ctx context.Context, text string) (DecisionView, error) {
 	text = strings.TrimSpace(text)
 	if len(text) < 3 {
@@ -268,7 +268,7 @@ type RerunView struct {
 	Agreement     string             `json:"agreement"` // e.g. "3/3 samples"
 }
 
-// Rerun re-decides with some sources removed (spec 4.2 "Remove and re-run").
+// Rerun re-decides with some sources removed.
 func (s *Service) Rerun(ctx context.Context, decisionID string, exclude []string) (RerunView, error) {
 	in, dv, err := s.Load(ctx, s.DB.Pool, decisionID)
 	if err != nil {
@@ -308,7 +308,7 @@ func (s *Service) Rerun(ctx context.Context, decisionID string, exclude []string
 	return rv, nil
 }
 
-// Influence computes (and stores) leave-one-out quick influence for a decision (spec 6.4).
+// Influence computes (and stores) leave-one-out quick influence for a decision.
 func (s *Service) Influence(ctx context.Context, decisionID string) (agent.LeaveOneOut, error) {
 	in, dv, err := s.Load(ctx, s.DB.Pool, decisionID)
 	if err != nil {

@@ -36,10 +36,10 @@ export function TopBar() {
   const role = path.startsWith("/merchant") ? "merchant" : path.startsWith("/creator") ? "creator" : path.startsWith("/shop") || path.startsWith("/order") ? "shopper" : "";
 
   async function reset() {
-    if (!confirm("Reset the demo? All orders made since the last reset are deleted and the seeded history is rebuilt.")) return;
+    if (!confirm("Reset all data? Orders made since the last reset are deleted and the catalog and order history are rebuilt.")) return;
     setResetting(true);
     try {
-      await api.post("/demo/reset");
+      await api.post("/admin/reset");
       resetTour();
       router.push("/merchant/");
       window.location.reload();
@@ -67,24 +67,24 @@ export function TopBar() {
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-2">
-          {cfg?.demo_mode && (
+          {cfg?.test_tools && (
             <Badge tone="accent" title="Commission vests after this return window if the purchase is kept">
-              Demo · vests in {dur(cfg.vesting_window_seconds)}
+              Vesting window {dur(cfg.vesting_window_seconds)}
             </Badge>
           )}
           {cfg && (
             <span className="hidden items-center gap-1.5 md:flex">
-              <Badge tone={cfg.paypal.mode === "sandbox" ? "good" : "sim"} title={cfg.paypal.mode === "sandbox" ? "Real PayPal sandbox API" : "No PayPal keys configured: PayPal simulator"}>
-                PayPal {cfg.paypal.mode === "sandbox" ? "Sandbox" : "Simulator"}
+              <Badge tone={cfg.paypal.mode === "sandbox" ? "good" : "test"} title={cfg.paypal.mode === "sandbox" ? "PayPal Sandbox REST API" : "PayPal test mode: add PayPal credentials to use Sandbox"}>
+                PayPal {cfg.paypal.mode === "sandbox" ? "Sandbox" : "Test mode"}
               </Badge>
               <Badge tone={cfg.llm.mode === "claude" ? "good" : "neutral"} title={`Decision model: ${cfg.llm.model}`}>
-                Agent: {cfg.llm.mode === "claude" ? cfg.llm.model : "offline engine"}
+                Agent: {cfg.llm.mode === "claude" ? cfg.llm.model : "Sway engine"}
               </Badge>
             </span>
           )}
-          {cfg?.demo_mode && role === "merchant" && (
+          {cfg?.test_tools && role === "merchant" && (
             <button className="btn btn-ghost btn-sm" onClick={reset} disabled={resetting}>
-              {resetting ? <Spinner /> : null} Reset demo
+              {resetting ? <Spinner /> : null} Reset data
             </button>
           )}
         </div>

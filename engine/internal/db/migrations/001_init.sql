@@ -19,7 +19,7 @@ CREATE TABLE products (
   specs        jsonb NOT NULL DEFAULT '{}'::jsonb,
   tagline      text NOT NULL DEFAULT '',
   image_url    text NOT NULL DEFAULT '',
-  source       text NOT NULL DEFAULT 'demo' CHECK (source IN ('demo','channel3')),
+  source       text NOT NULL DEFAULT 'curated' CHECK (source IN ('curated','channel3')),
   external_id  text,
   created_at   timestamptz NOT NULL DEFAULT now()
 );
@@ -109,16 +109,16 @@ CREATE TABLE orders (
   sway_fee_bps         int NOT NULL,
   paypal_order_id      text UNIQUE,
   paypal_capture_id    text UNIQUE,
-  payment_mode         text NOT NULL CHECK (payment_mode IN ('sandbox','sim','seeded')),
+  payment_mode         text NOT NULL CHECK (payment_mode IN ('sandbox','test','historical')),
   status               text NOT NULL DEFAULT 'CREATED' CHECK (status IN ('CREATED','APPROVED','CAPTURED','REFUNDED','PARTIALLY_REFUNDED','FAILED')),
   dispute_status       text NOT NULL DEFAULT 'NONE' CHECK (dispute_status IN ('NONE','OPEN','RESOLVED_SELLER','RESOLVED_BUYER')),
-  dispute_simulated    boolean NOT NULL DEFAULT false,
+  dispute_test    boolean NOT NULL DEFAULT false,
   refunded_cents       bigint NOT NULL DEFAULT 0 CHECK (refunded_cents >= 0),
   captured_at          timestamptz,
   vests_at             timestamptz,
   vested_at            timestamptz,
   buyer_email          text NOT NULL DEFAULT '',
-  seeded               boolean NOT NULL DEFAULT false,
+  historical               boolean NOT NULL DEFAULT false,
   created_at           timestamptz NOT NULL DEFAULT now(),
   CHECK (refunded_cents <= amount_cents)
 );
@@ -178,7 +178,7 @@ CREATE TABLE ledger_entries (
   signed_cents  bigint NOT NULL,
   ref           text NOT NULL DEFAULT '',
   memo          text NOT NULL DEFAULT '',
-  simulated     boolean NOT NULL DEFAULT false,
+  test_mode     boolean NOT NULL DEFAULT false,
   prev_hash     text NOT NULL,
   hash          text NOT NULL UNIQUE,
   created_at    timestamptz NOT NULL DEFAULT now(),
@@ -193,7 +193,7 @@ CREATE TABLE refunds (
   paypal_refund_id  text NOT NULL UNIQUE,
   amount_cents      bigint NOT NULL CHECK (amount_cents > 0),
   reason            text NOT NULL DEFAULT '',
-  simulated         boolean NOT NULL DEFAULT false,
+  test_mode         boolean NOT NULL DEFAULT false,
   created_at        timestamptz NOT NULL DEFAULT now()
 );
 
@@ -229,7 +229,7 @@ CREATE TABLE webhook_events (
   event_type       text NOT NULL,
   resource_id      text NOT NULL DEFAULT '',
   verified         boolean NOT NULL DEFAULT false,
-  simulated        boolean NOT NULL DEFAULT false,
+  test_mode        boolean NOT NULL DEFAULT false,
   payload          jsonb NOT NULL,
   received_at      timestamptz NOT NULL DEFAULT now(),
   processed_at     timestamptz,
@@ -251,8 +251,8 @@ CREATE TABLE jobs (
 );
 CREATE INDEX jobs_ready_idx ON jobs(status, run_after);
 
--- State for the PayPal simulator (used only when no sandbox credentials are configured).
-CREATE TABLE paypal_sim_objects (
+-- State for PayPal test mode (used when no Sandbox credentials are configured).
+CREATE TABLE paypal_test_objects (
   id          text PRIMARY KEY,
   kind        text NOT NULL,
   data        jsonb NOT NULL,
@@ -260,7 +260,7 @@ CREATE TABLE paypal_sim_objects (
   updated_at  timestamptz NOT NULL DEFAULT now()
 );
 
--- Append-only enforcement. A demo reset sets sway.allow_reset = 'on' inside its own transaction.
+-- Append-only enforcement. An admin reset sets sway.allow_reset = 'on' inside its own transaction.
 CREATE FUNCTION sway_append_only() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   IF current_setting('sway.allow_reset', true) = 'on' THEN

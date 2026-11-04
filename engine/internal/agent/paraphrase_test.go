@@ -20,7 +20,7 @@ var paraphrases = []string{
 	"Which noise-cancelling headphones should I get for long-haul flights? Under $250.",
 }
 
-// E2 robustness: the flip must hold across phrasings, not just the canned prompt (spec target >= 9/10).
+// E2 robustness: the flip must hold across phrasings, not just the canned prompt (target: at least 9/10).
 func TestFlipAcrossParaphrases(t *testing.T) {
 	ps, all := world(t)
 	cands := pick(ps, "headphones")

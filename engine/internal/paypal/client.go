@@ -370,7 +370,7 @@ func (c *Client) CancelPayoutItem(ctx context.Context, itemID string) (PayoutIte
 	return PayoutItem{ItemID: resp.PayoutItemID, SenderItemID: resp.PayoutItem.SenderItemID, Status: resp.TransactionStatus}, nil
 }
 
-// VerifyWebhook asks PayPal to verify the transmission signature (spec 8.5). The event is passed
+// VerifyWebhook asks PayPal to verify the transmission signature. The event is passed
 // as raw JSON so the bytes PayPal signed are exactly the bytes it verifies.
 func (c *Client) VerifyWebhook(ctx context.Context, h http.Header, body []byte) (bool, error) {
 	if c.webhookID == "" {

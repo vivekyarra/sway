@@ -1,4 +1,4 @@
-// Package attribution turns a captured order into creator earnings (spec 6.5):
+// Package attribution turns a captured order into creator earnings:
 // screen sources by leave-one-out, run exact Shapley over the top players (Monte Carlo past the call
 // budget), compute the influence share, and split the commission into the ledger in one transaction.
 package attribution
@@ -264,7 +264,7 @@ func (r *Runner) run(ctx context.Context, orderID string) error {
 	vBg := valueOr(values, 0, vNone.Mean)
 	gap := shapley.EfficiencyGap(phi, valueOr(values, full, vAll), vBg)
 
-	// 6. Influence share and allocation (spec 6.5 steps 3-4).
+	// 6. Influence share and allocation.
 	share := 0.0
 	if vAll > 0 && vAll-vNone.Mean >= r.Cfg.MinInfluence {
 		share = math.Max(0, math.Min(1, (vAll-vNone.Mean)/vAll))
@@ -324,7 +324,7 @@ func (r *Runner) run(ctx context.Context, orderID string) error {
 	playersJSON, _ := json.Marshal(outPlayers)
 	coalJSON, _ := json.Marshal(map[string]any{"players": players, "background": background, "coalitions": coalitions,
 		"interactions": interactions(method, n, values), "v_all": round4(vAll), "v_none": round4(vNone.Mean), "v_background": round4(vBg)})
-	simulated := o.PaymentMode != "sandbox"
+	testMode := o.PaymentMode != "sandbox"
 
 	// 7. One transaction: attributions + ledger + job status. All or nothing.
 	err = r.DB.Tx(ctx, func(q db.Q) error {
@@ -340,7 +340,7 @@ func (r *Runner) run(ctx context.Context, orderID string) error {
 		}
 		entries := []ledger.Entry{{
 			Type: ledger.CommissionReserved, OrderID: orderID, From: ledger.MerchantFunding, To: ledger.OrderCommission,
-			Amount: split.Commission, IdemKey: ledger.Key("reserve", orderID), Memo: "commission reserved at capture", Simulated: simulated,
+			Amount: split.Commission, IdemKey: ledger.Key("reserve", orderID), Memo: "commission reserved at capture", TestMode: testMode,
 		}}
 		for i, id := range players {
 			role := "player"
@@ -351,7 +351,7 @@ func (r *Runner) run(ctx context.Context, orderID string) error {
 			}
 			entries = append(entries, ledger.Entry{
 				Type: ledger.AccruePending, OrderID: orderID, CreatorID: srcByID[id].creator, From: ledger.OrderCommission, To: ledger.CreatorPending,
-				Amount: amounts[i], IdemKey: ledger.Key("accrue", orderID, id), Ref: id, Memo: "influence share of creator pool", Simulated: simulated,
+				Amount: amounts[i], IdemKey: ledger.Key("accrue", orderID, id), Ref: id, Memo: "influence share of creator pool", TestMode: testMode,
 			})
 		}
 		for _, id := range background {
@@ -363,9 +363,9 @@ func (r *Runner) run(ctx context.Context, orderID string) error {
 		}
 		entries = append(entries,
 			ledger.Entry{Type: ledger.SwayFeePending, OrderID: orderID, From: ledger.OrderCommission, To: ledger.SwayPending, Amount: split.SwayFee,
-				IdemKey: ledger.Key("fee", orderID), Memo: "Sway fee on creator pool", Simulated: simulated},
+				IdemKey: ledger.Key("fee", orderID), Memo: "Sway fee on creator pool", TestMode: testMode},
 			ledger.Entry{Type: ledger.ReturnToMerchant, OrderID: orderID, From: ledger.OrderCommission, To: ledger.MerchantReturned, Amount: split.ReturnedToMerchant,
-				IdemKey: ledger.Key("return", orderID), Memo: "commission not earned by content", Simulated: simulated},
+				IdemKey: ledger.Key("return", orderID), Memo: "commission not earned by content", TestMode: testMode},
 		)
 		if _, err := ledger.Post(ctx, q, entries...); err != nil {
 			return err
@@ -468,18 +468,18 @@ func (r *Runner) explain(ctx context.Context, orderID string, in agent.Input, pl
 		case math.Abs(p.Phi) <= MinPhi:
 			text = "The agent read your content, but it did not move this decision either way, so it earns nothing on this order. Sources are paid only for influence that changes what gets bought."
 		case p.Phi < 0:
-			text = agent.SimExplain(ei)
+			text = agent.LocalExplain(ei)
 		case r.Explainer != nil:
 			t, err := r.Explainer.Explain(ctx, ei)
 			if err != nil {
 				if r.Log != nil {
 					r.Log.Warn("explanation failed, using template", "err", err)
 				}
-				t = agent.SimExplain(ei)
+				t = agent.LocalExplain(ei)
 			}
 			text = t
 		default:
-			text = agent.SimExplain(ei)
+			text = agent.LocalExplain(ei)
 		}
 		if _, err := r.DB.Pool.Exec(ctx, `UPDATE attributions SET explanation=$3 WHERE order_id=$1 AND source_id=$2 AND explanation IS NULL`, orderID, p.SourceID, text); err != nil {
 			return err

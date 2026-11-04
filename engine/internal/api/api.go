@@ -1,4 +1,4 @@
-// Package api is Sway's HTTP surface: the JSON API from spec Section 10 plus the embedded web UI.
+// Package api is Sway's HTTP surface: the JSON API plus the embedded web UI.
 package api
 
 import (
@@ -16,7 +16,7 @@ import (
 	"github.com/vivekyarra/sway/engine/internal/agent"
 	"github.com/vivekyarra/sway/engine/internal/config"
 	"github.com/vivekyarra/sway/engine/internal/db"
-	"github.com/vivekyarra/sway/engine/internal/demo"
+	"github.com/vivekyarra/sway/engine/internal/history"
 	"github.com/vivekyarra/sway/engine/internal/ledger"
 	"github.com/vivekyarra/sway/engine/internal/mcp"
 	"github.com/vivekyarra/sway/engine/internal/payments"
@@ -37,7 +37,7 @@ type Server struct {
 	Agent      *agent.Agent
 	Shop       *shop.Service
 	Pay        *payments.Service
-	Demo       *demo.Builder
+	History    *history.Builder
 	Classifier screening.Classifier
 	Web        http.Handler // static UI (may be nil)
 	TrustProxy bool
@@ -77,11 +77,11 @@ func (s *Server) Handler() http.Handler {
 	r("GET /api/creators/{id}", s.readLimit, s.getCreator)
 	r("GET /api/merchant/overview", s.readLimit, s.merchant)
 	r("POST /api/merchant/orders/{id}/refund", s.writeLimit, post(s.refund))
-	r("POST /api/merchant/orders/{id}/simulate-dispute", s.writeLimit, post(s.demoOnly(s.simulateDispute)))
+	r("POST /api/merchant/orders/{id}/test-dispute", s.writeLimit, post(s.testToolsOnly(s.testDispute)))
 	r("POST /api/merchant/payouts/run", s.writeLimit, post(s.runPayouts))
 	r("POST /api/merchant/settings", s.writeLimit, post(s.updateSettings))
-	r("POST /api/demo/fast-forward", s.writeLimit, post(s.demoOnly(s.fastForward)))
-	r("POST /api/demo/reset", s.writeLimit, post(s.demoOnly(s.reset)))
+	r("POST /api/admin/fast-forward", s.writeLimit, post(s.testToolsOnly(s.fastForward)))
+	r("POST /api/admin/reset", s.writeLimit, post(s.testToolsOnly(s.reset)))
 	r("GET /api/ledger/verify", s.readLimit, s.verifyLedger)
 	mcpServer := &mcp.Server{Shop: s.Shop, DB: s.DB, PublicBaseURL: s.Cfg.PublicBaseURL, Version: s.Version, AllowedOrigins: s.Cfg.AllowedOrigins}
 	mux.HandleFunc("POST /mcp", s.rateLimit(s.agentLimit, limitBody(64<<10, mcpServer.ServeHTTP)))
@@ -130,7 +130,7 @@ func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]apiError{"error": {Code: "unsupported_request", Message: unsupported.Error(), Suggestions: unsupported.Suggestions}})
 	case errors.Is(err, payments.ErrNotFound), errors.Is(err, views.ErrNotFound):
 		writeError(w, http.StatusNotFound, "not_found", "Not found")
-	case errors.Is(err, payments.ErrDemoOnly):
+	case errors.Is(err, payments.ErrTestToolsOnly):
 		writeError(w, http.StatusNotFound, "not_found", "Not found")
 	case errors.Is(err, payments.ErrConflict):
 		writeError(w, http.StatusConflict, "conflict", trimErr(err))
@@ -154,9 +154,9 @@ func trimErr(err error) string {
 	return msg
 }
 
-func (s *Server) demoOnly(h http.HandlerFunc) http.HandlerFunc {
+func (s *Server) testToolsOnly(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !s.Cfg.DemoMode {
+		if !s.Cfg.TestTools {
 			writeError(w, http.StatusNotFound, "not_found", "Not found")
 			return
 		}
@@ -207,7 +207,7 @@ func (s *Server) config(w http.ResponseWriter, r *http.Request) {
 		pp["buyer_password"] = s.Cfg.PayPal.BuyerPassword
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"version": s.Version, "demo_mode": s.Cfg.DemoMode, "catalog_mode": s.Cfg.CatalogMode,
+		"version": s.Version, "test_tools": s.Cfg.TestTools, "catalog_mode": s.Cfg.CatalogMode,
 		"paypal":                 pp,
 		"llm":                    map[string]string{"mode": s.Agent.Engine.Name(), "model": s.Agent.Engine.Model(), "prompt_version": agent.PromptVersion},
 		"vesting_window_seconds": int(s.Cfg.VestingWindow.Seconds()), "commission_rate_bps": s.Cfg.CommissionRateBps,
@@ -395,7 +395,7 @@ func (s *Server) refund(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, res)
 }
 
-func (s *Server) simulateDispute(w http.ResponseWriter, r *http.Request) {
+func (s *Server) testDispute(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Action string `json:"action"`
 	}
@@ -403,11 +403,11 @@ func (s *Server) simulateDispute(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_json", "Body must be JSON: {\"action\": \"open|resolve_seller|resolve_buyer\"}")
 		return
 	}
-	if err := s.Pay.SimulateDispute(r.Context(), r.PathValue("id"), body.Action); err != nil {
+	if err := s.Pay.TestDispute(r.Context(), r.PathValue("id"), body.Action); err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "simulated": true, "action": body.Action})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "test_event": true, "action": body.Action})
 }
 
 func (s *Server) runPayouts(w http.ResponseWriter, r *http.Request) {
@@ -423,7 +423,7 @@ func (s *Server) runPayouts(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, plan)
 }
 
-// updateSettings changes the merchant's commission rate and vesting window (spec 4.5). The Sway fee stays
+// updateSettings changes the merchant's commission rate and vesting window. The Sway fee stays
 // read-only. New orders use the new values; existing orders keep the terms they were bought under.
 func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
 	var body struct {
@@ -439,7 +439,7 @@ func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	minVest := 10
-	if !s.Cfg.DemoMode {
+	if !s.Cfg.TestTools {
 		minVest = 86400
 	}
 	if body.VestingWindowSeconds != nil && (*body.VestingWindowSeconds < minVest || *body.VestingWindowSeconds > 90*86400) {
@@ -484,7 +484,7 @@ func (s *Server) reset(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 3*time.Minute)
 	defer cancel()
-	if err := s.Demo.Reset(ctx, s.Classifier); err != nil {
+	if err := s.History.Reset(ctx, s.Classifier); err != nil {
 		s.fail(w, r, err)
 		return
 	}

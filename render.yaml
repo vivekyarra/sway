@@ -1,6 +1,6 @@
 # Render Blueprint: web service (API + UI), background worker, managed Postgres.
-# New > Blueprint > pick this repo. Fill the "sync: false" secrets in the dashboard (optional: without them Sway
-# runs its labelled PayPal simulator and offline agent). Register the PayPal webhook at
+# New > Blueprint > pick this repo. Fill the "sync: false" secrets in the dashboard (without them Sway runs in
+# PayPal test mode with its built-in reasoning engine). Register the PayPal webhook at
 # https://<service>.onrender.com/api/webhooks/paypal and paste its id into PAYPAL_WEBHOOK_ID.
 databases:
   - name: sway-db
@@ -23,7 +23,7 @@ services:
         value: "false"
       - key: TRUST_PROXY
         value: "true"
-      - key: DEMO_MODE
+      - key: TEST_TOOLS
         value: "true"
       - key: VESTING_WINDOW_SECONDS
         value: "120"

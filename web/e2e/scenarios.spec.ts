@@ -58,11 +58,11 @@ test("E4 partial refund, E6/E7 disputes", async ({ page, request }) => {
   expect(o.refunded_cents).toBe(11450);
   expect(o.split.balanced).toBe(true);
 
-  await api(request, "POST", `/merchant/orders/${orderId}/simulate-dispute`, { action: "open" });
+  await api(request, "POST", `/merchant/orders/${orderId}/test-dispute`, { action: "open" });
   await page.goto(`/order/?id=${orderId}`);
   await expect(page.getByText("Frozen while a dispute is open.")).toBeVisible();
-  await expect(page.getByText("simulated dispute")).toBeVisible();
-  await api(request, "POST", `/merchant/orders/${orderId}/simulate-dispute`, { action: "resolve_buyer" });
+  await expect(page.getByText("test dispute")).toBeVisible();
+  await api(request, "POST", `/merchant/orders/${orderId}/test-dispute`, { action: "resolve_buyer" });
   const verify = await api<{ ok: boolean; trial_balance_zero: boolean }>(request, "GET", "/ledger/verify");
   expect(verify.ok && verify.trial_balance_zero).toBe(true);
 });
@@ -85,10 +85,10 @@ test("unsupported requests suggest what the agent can shop", async ({ page }) =>
   await expect(page.getByRole("button", { name: "headphones", exact: true })).toBeVisible();
 });
 
-test("seeded history, pretty URLs and creator dashboards", async ({ page }) => {
+test("order history, pretty URLs and creator dashboards", async ({ page }) => {
   await page.goto("/orders/ord_seed_01");
   await expect(page).toHaveURL(/\/order\/\?id=ord_seed_01/);
-  await expect(page.getByText("seeded history").first()).toBeVisible();
+  await expect(page.getByText("order history").first()).toBeVisible();
   await page.goto("/creator/?id=c_dealbot");
   await expect(page.getByText(/Blocked: tries to instruct AI agents/)).toBeVisible();
   await page.goto("/creator/?id=c_ana");

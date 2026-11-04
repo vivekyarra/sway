@@ -77,11 +77,11 @@ func TestChaos(t *testing.T) {
 			case 1, 2:
 				_, _ = m.Pay.Refund(ctx, o, int64(1+r.IntN(9000)), "partial", "")
 			case 3:
-				_ = m.Pay.SimulateDispute(ctx, o, payments.DisputeOpen)
+				_ = m.Pay.TestDispute(ctx, o, payments.DisputeOpen)
 			case 4:
-				_ = m.Pay.SimulateDispute(ctx, o, payments.DisputeResolveSeller)
+				_ = m.Pay.TestDispute(ctx, o, payments.DisputeResolveSeller)
 			case 5:
-				_ = m.Pay.SimulateDispute(ctx, o, payments.DisputeResolveBuyer)
+				_ = m.Pay.TestDispute(ctx, o, payments.DisputeResolveBuyer)
 			case 6:
 				_, _ = m.Pay.FastForward(ctx)
 				_, _ = m.Pay.VestDue(ctx)
@@ -156,7 +156,7 @@ func TestConcurrentStorm(t *testing.T) {
 			case 0, 1:
 				_, _ = m.Pay.Refund(ctx, o, 3000, "storm", "")
 			case 2:
-				_ = m.Pay.SimulateDispute(ctx, o, payments.DisputeOpen)
+				_ = m.Pay.TestDispute(ctx, o, payments.DisputeOpen)
 			case 3:
 				_, _ = m.Pay.VestDue(ctx)
 			case 4:

@@ -17,11 +17,11 @@ import (
 	"github.com/vivekyarra/sway/engine/internal/db"
 )
 
-// Channel3 imports real products for a shopping request (live catalog mode, spec 6.1).
+// Channel3 imports real products for a shopping request (live catalog mode).
 //
 // Results are upserted as products in a request-specific category so the same agent, attribution and
-// payment pipeline runs on them unchanged. Live products carry real brand names, so the demo video uses
-// the invented catalog instead (hackathon trademark rule).
+// payment pipeline runs on them unchanged. Live products carry real brand names; Sway's own curated catalog
+// uses original brands.
 type Channel3 struct {
 	APIKey  string
 	BaseURL string

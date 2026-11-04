@@ -136,18 +136,18 @@ function OrderActions({ row, onDone }: { row: OrderRow; onDone: (msg: string) =>
       >
         Refund
       </button>
-      {cfg?.demo_mode && (
+      {cfg?.test_tools && (
         <select
-          aria-label="Simulate dispute"
+          aria-label="Test a dispute"
           className="rounded-full border border-line-2 bg-card px-2 py-1 text-xs"
           disabled={busy || row.status === "REFUNDED"}
           value=""
           onChange={(e) => {
             const action = e.target.value;
-            if (action) act(() => api.post(`/merchant/orders/${row.id}/simulate-dispute`, { action }), `Simulated dispute: ${action.replace("_", " ")}.`);
+            if (action) act(() => api.post(`/merchant/orders/${row.id}/test-dispute`, { action }), `Test dispute: ${action.replace("_", " ")}.`);
           }}
         >
-          <option value="">Simulate dispute…</option>
+          <option value="">Test a dispute…</option>
           {row.dispute_status !== "OPEN" && <option value="open">Open dispute</option>}
           {row.dispute_status === "OPEN" && <option value="resolve_seller">Resolve for seller</option>}
           {row.dispute_status === "OPEN" && <option value="resolve_buyer">Resolve for buyer</option>}
@@ -203,7 +203,7 @@ function MerchantView() {
         minWidth: 150,
         cellRenderer: (p: ICellRendererParams<OrderRow>) =>
           p.value === "NONE" ? <span className="text-muted">—</span> : (
-            <span className="flex items-center gap-1"><StatusPill status={p.value === "OPEN" ? "OPEN" : p.value} />{p.data?.dispute_simulated && <Badge tone="sim">sim</Badge>}</span>
+            <span className="flex items-center gap-1"><StatusPill status={p.value === "OPEN" ? "OPEN" : p.value} />{p.data?.dispute_test && <Badge tone="test">test</Badge>}</span>
           ),
       },
       { field: "attribution_status", headerName: "Attribution", cellRenderer: (p: ICellRendererParams<OrderRow>) => <StatusPill status={p.value} />, maxWidth: 130 },
@@ -216,7 +216,7 @@ function MerchantView() {
         field: "payment_mode",
         headerName: "Origin",
         maxWidth: 110,
-        valueFormatter: (p) => (p.data?.seeded ? "seeded" : p.value === "sim" ? "simulator" : "sandbox"),
+        valueFormatter: (p) => (p.data?.historical ? "history" : p.value === "test" ? "test mode" : "sandbox"),
       },
       { headerName: "Actions", minWidth: 270, sortable: false, filter: false, cellRenderer: (p: ICellRendererParams<OrderRow>) => p.data && <OrderActions row={p.data} onDone={note} /> },
     ],
@@ -248,8 +248,8 @@ function MerchantView() {
       { field: "amount_cents", headerName: "Amount", valueFormatter: (p) => usd(p.value), maxWidth: 110, cellClass: "tabular" },
       { field: "offset_cents", headerName: "Clawback offset", valueFormatter: (p) => (p.value ? usd(p.value) : "—"), maxWidth: 140, cellClass: "tabular" },
       { field: "status", headerName: "Status", cellRenderer: (p: ICellRendererParams<PayoutItem>) => <StatusPill status={p.value} />, maxWidth: 130 },
-      { field: "paypal_payout_batch_id", headerName: "PayPal batch", valueFormatter: (p) => (p.data?.mode === "seeded" ? "seeded history" : p.value ?? "submitting…"), minWidth: 170, cellClass: "font-mono text-xs" },
-      { field: "paypal_payout_item_id", headerName: "PayPal item", valueFormatter: (p) => (p.data?.mode === "seeded" ? "—" : p.value ?? "…"), minWidth: 170, cellClass: "font-mono text-xs" },
+      { field: "paypal_payout_batch_id", headerName: "PayPal batch", valueFormatter: (p) => (p.data?.mode === "historical" ? "order history" : p.value ?? "submitting…"), minWidth: 170, cellClass: "font-mono text-xs" },
+      { field: "paypal_payout_item_id", headerName: "PayPal item", valueFormatter: (p) => (p.data?.mode === "historical" ? "—" : p.value ?? "…"), minWidth: 170, cellClass: "font-mono text-xs" },
     ],
     [],
   );
@@ -278,7 +278,7 @@ function MerchantView() {
         field: "verified",
         headerName: "Signature",
         maxWidth: 140,
-        cellRenderer: (p: ICellRendererParams<Webhook>) => (p.data?.simulated ? <Badge tone="sim">SIMULATED</Badge> : p.value ? <Badge tone="good">verified</Badge> : <Badge tone="warn">unverified</Badge>),
+        cellRenderer: (p: ICellRendererParams<Webhook>) => (p.data?.test_mode ? <Badge tone="test">test event</Badge> : p.value ? <Badge tone="good">verified</Badge> : <Badge tone="warn">unverified</Badge>),
       },
       { field: "outcome", headerName: "Outcome", minWidth: 200 },
       { field: "processed_at", headerName: "Processed", valueFormatter: (p) => (p.value ? ago(p.value) : "queued"), maxWidth: 120 },
@@ -311,8 +311,8 @@ function MerchantView() {
           <Settings m={m} onSaved={note} />
         </div>
         <div className="flex flex-wrap gap-2">
-          {cfg?.demo_mode && (
-            <button className="btn btn-ghost" disabled={!!busy} onClick={() => action("ff", "/demo/fast-forward", (r) => `Fast-forwarded vesting: ${r.vested ?? 0} order(s) vested. Payouts follow automatically.`)}>
+          {cfg?.test_tools && (
+            <button className="btn btn-ghost" disabled={!!busy} onClick={() => action("ff", "/admin/fast-forward", (r) => `Fast-forwarded vesting: ${r.vested ?? 0} order(s) vested. Payouts follow automatically.`)}>
               {busy === "ff" ? <Spinner /> : "⏩"} Fast-forward vesting
             </button>
           )}
@@ -389,7 +389,7 @@ function MerchantView() {
             <div className="mb-3 flex flex-wrap gap-2 text-xs">
               {(m.batches ?? []).slice(0, 6).map((b) => (
                 <span key={b.id} className="chip border border-line bg-paper py-1 text-ink-2">
-                  {b.mode === "seeded" ? "seeded" : b.paypal_payout_batch_id ?? b.sender_batch_id} · {usd(b.total_cents)} · <StatusPill status={b.status} />
+                  {b.mode === "historical" ? "order history" : b.paypal_payout_batch_id ?? b.sender_batch_id} · {usd(b.total_cents)} · <StatusPill status={b.status} />
                 </span>
               ))}
             </div>

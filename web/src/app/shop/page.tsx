@@ -269,7 +269,7 @@ function Shop() {
                     {cfg ? `${(cfg.commission_rate_bps / 100).toFixed(0)}% merchant commission is split among the creators who swayed this choice, and vests only if you keep it.` : ""}
                   </p>
                   <div className="mt-4 border-t border-line pt-3 text-[11px] text-muted">
-                    Model: {decision.engine === "claude" ? decision.model : "Sway offline engine"} · prompt {decision.prompt_version} · decision {decision.id}
+                    Model: {decision.engine === "claude" ? decision.model : "Sway engine"} · prompt {decision.prompt_version} · decision {decision.id}
                   </div>
                 </div>
               </section>

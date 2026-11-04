@@ -40,7 +40,7 @@ func TestMulBpsRounding(t *testing.T) {
 	}
 }
 
-// Spec 13.1 #2: 1,000 random splits; parts always sum exactly to the whole; no negative cents.
+// 1,000 random splits; parts always sum exactly to the whole; no negative cents.
 func TestAllocateRandomSumsExactly(t *testing.T) {
 	r := rand.New(rand.NewPCG(7, 11))
 	for i := 0; i < 1000; i++ {

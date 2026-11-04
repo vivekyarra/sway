@@ -63,9 +63,9 @@ export function JudgeTour() {
                       password: {cfg.paypal.buyer_password}
                     </div>
                   )}
-                  {s.id === 3 && cfg?.paypal.mode === "sim" && (
+                  {s.id === 3 && cfg?.paypal.mode === "test" && (
                     <div className="mx-2 mb-2 ml-10 rounded-lg bg-paper-2 px-3 py-2 text-[11px] leading-5 text-ink-2">
-                      Running without PayPal keys: checkout uses the labelled PayPal simulator.
+                      Checkout runs in PayPal test mode. Add PayPal credentials to check out with a Sandbox buyer.
                     </div>
                   )}
                 </li>

@@ -16,24 +16,24 @@ import (
 	"github.com/vivekyarra/sway/engine/internal/db"
 )
 
-// Sim mirrors PayPal's semantics closely enough to exercise every Sway code path without credentials:
+// TestMode mirrors PayPal's semantics closely enough to exercise every Sway code path without credentials:
 // idempotent create/capture by request id, refund limits, and payout items that settle after a delay.
 // Receivers containing "unclaimed" stay UNCLAIMED; receivers containing "fail" FAIL. Everything it
-// creates is labelled SIMULATED in the UI. It never accepts external webhooks.
-type Sim struct {
+// creates is labelled as a test event in the UI. It never accepts external webhooks.
+type TestMode struct {
 	DB          *db.DB
 	SettleAfter time.Duration
 }
 
-func (s *Sim) Mode() string { return "sim" }
+func (s *TestMode) Mode() string { return "test" }
 
-func simID(prefix string) string {
+func tmID(prefix string) string {
 	var b [8]byte
 	_, _ = rand.Read(b[:])
 	return prefix + strings.ToUpper(hex.EncodeToString(b[:]))
 }
 
-type simOrder struct {
+type tmOrder struct {
 	ID          string `json:"id"`
 	Status      string `json:"status"`
 	AmountCents int64  `json:"amount_cents"`
@@ -42,7 +42,7 @@ type simOrder struct {
 	Refunded    int64  `json:"refunded_cents"`
 }
 
-type simItem struct {
+type tmItem struct {
 	ItemID       string    `json:"item_id"`
 	SenderItemID string    `json:"sender_item_id"`
 	Receiver     string    `json:"receiver"`
@@ -51,13 +51,13 @@ type simItem struct {
 	SettleAt     time.Time `json:"settle_at"`
 }
 
-type simBatch struct {
-	BatchID string    `json:"batch_id"`
-	Items   []simItem `json:"items"`
+type tmBatch struct {
+	BatchID string   `json:"batch_id"`
+	Items   []tmItem `json:"items"`
 }
 
-func (s *Sim) get(ctx context.Context, q db.Q, id string, v any, lock bool) (bool, error) {
-	sql := `SELECT data FROM paypal_sim_objects WHERE id=$1`
+func (s *TestMode) get(ctx context.Context, q db.Q, id string, v any, lock bool) (bool, error) {
+	sql := `SELECT data FROM paypal_test_objects WHERE id=$1`
 	if lock {
 		sql += ` FOR UPDATE`
 	}
@@ -72,14 +72,14 @@ func (s *Sim) get(ctx context.Context, q db.Q, id string, v any, lock bool) (boo
 	return true, json.Unmarshal(raw, v)
 }
 
-func (s *Sim) put(ctx context.Context, q db.Q, id, kind string, v any) error {
+func (s *TestMode) put(ctx context.Context, q db.Q, id, kind string, v any) error {
 	raw, _ := json.Marshal(v)
-	_, err := q.Exec(ctx, `INSERT INTO paypal_sim_objects (id, kind, data) VALUES ($1,$2,$3)
+	_, err := q.Exec(ctx, `INSERT INTO paypal_test_objects (id, kind, data) VALUES ($1,$2,$3)
 		ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data, updated_at=now()`, id, kind, raw)
 	return err
 }
 
-func (s *Sim) CreateOrder(ctx context.Context, r CreateOrderRequest) (Order, error) {
+func (s *TestMode) CreateOrder(ctx context.Context, r CreateOrderRequest) (Order, error) {
 	if r.AmountCents <= 0 {
 		return Order{}, &Error{Status: 422, Name: "UNPROCESSABLE_ENTITY", Issue: "AMOUNT_MUST_BE_POSITIVE"}
 	}
@@ -92,7 +92,7 @@ func (s *Sim) CreateOrder(ctx context.Context, r CreateOrderRequest) (Order, err
 			out = Order{ID: existing, Status: "CREATED"}
 			return nil
 		}
-		o := simOrder{ID: simID("SIM-ORD-"), Status: "CREATED", AmountCents: r.AmountCents, ReferenceID: r.ReferenceID}
+		o := tmOrder{ID: tmID("TEST-ORD-"), Status: "CREATED", AmountCents: r.AmountCents, ReferenceID: r.ReferenceID}
 		if err := s.put(ctx, q, o.ID, "order", o); err != nil {
 			return err
 		}
@@ -102,10 +102,10 @@ func (s *Sim) CreateOrder(ctx context.Context, r CreateOrderRequest) (Order, err
 	return out, err
 }
 
-func (s *Sim) CaptureOrder(ctx context.Context, paypalOrderID, requestID string) (Capture, error) {
+func (s *TestMode) CaptureOrder(ctx context.Context, paypalOrderID, requestID string) (Capture, error) {
 	var out Capture
 	err := s.DB.Tx(ctx, func(q db.Q) error {
-		var o simOrder
+		var o tmOrder
 		ok, err := s.get(ctx, q, paypalOrderID, &o, true)
 		if err != nil {
 			return err
@@ -114,7 +114,7 @@ func (s *Sim) CaptureOrder(ctx context.Context, paypalOrderID, requestID string)
 			return &Error{Status: 404, Name: "RESOURCE_NOT_FOUND", Issue: "INVALID_RESOURCE_ID"}
 		}
 		if o.Status != "COMPLETED" { // capturing twice returns the original capture (idempotent)
-			o.Status, o.CaptureID = "COMPLETED", simID("SIM-CAP-")
+			o.Status, o.CaptureID = "COMPLETED", tmID("TEST-CAP-")
 			if err := s.put(ctx, q, o.ID, "order", o); err != nil {
 				return err
 			}
@@ -123,13 +123,13 @@ func (s *Sim) CaptureOrder(ctx context.Context, paypalOrderID, requestID string)
 			}
 		}
 		out = Capture{OrderID: o.ID, OrderStatus: o.Status, CaptureID: o.CaptureID, Status: "COMPLETED", AmountCents: o.AmountCents,
-			PayerEmail: "sim-buyer@personal.example.com", ReferenceID: o.ReferenceID}
+			PayerEmail: "test-buyer@personal.example.com", ReferenceID: o.ReferenceID}
 		return nil
 	})
 	return out, err
 }
 
-func (s *Sim) RefundCapture(ctx context.Context, captureID string, amountCents int64, requestID, note string) (Refund, error) {
+func (s *TestMode) RefundCapture(ctx context.Context, captureID string, amountCents int64, requestID, note string) (Refund, error) {
 	var out Refund
 	err := s.DB.Tx(ctx, func(q db.Q) error {
 		var prior Refund
@@ -145,7 +145,7 @@ func (s *Sim) RefundCapture(ctx context.Context, captureID string, amountCents i
 		} else if !ok {
 			return &Error{Status: 404, Name: "RESOURCE_NOT_FOUND", Issue: "INVALID_RESOURCE_ID"}
 		}
-		var o simOrder
+		var o tmOrder
 		if _, err := s.get(ctx, q, orderID, &o, true); err != nil {
 			return err
 		}
@@ -163,28 +163,28 @@ func (s *Sim) RefundCapture(ctx context.Context, captureID string, amountCents i
 		if err := s.put(ctx, q, o.ID, "order", o); err != nil {
 			return err
 		}
-		out = Refund{ID: simID("SIM-REF-"), Status: "COMPLETED", AmountCents: amountCents, CaptureID: captureID}
+		out = Refund{ID: tmID("TEST-REF-"), Status: "COMPLETED", AmountCents: amountCents, CaptureID: captureID}
 		return s.put(ctx, q, "req:"+requestID, "refund", out)
 	})
 	return out, err
 }
 
-func (s *Sim) CreatePayoutBatch(ctx context.Context, r PayoutBatchRequest) (PayoutBatch, error) {
+func (s *TestMode) CreatePayoutBatch(ctx context.Context, r PayoutBatchRequest) (PayoutBatch, error) {
 	var out PayoutBatch
 	err := s.DB.Tx(ctx, func(q db.Q) error {
-		var existing simBatch
+		var existing tmBatch
 		if ok, err := s.get(ctx, q, "sbid:"+r.SenderBatchID, &existing, true); err != nil {
 			return err
 		} else if ok {
 			return &Error{Status: 400, Name: "USER_BUSINESS_ERROR", Issue: "DUPLICATE_REQUEST_ID", Message: "duplicate sender_batch_id"}
 		}
-		b := simBatch{BatchID: simID("SIM-BATCH-")}
+		b := tmBatch{BatchID: tmID("TEST-BATCH-")}
 		settle := time.Now().Add(s.SettleAfter)
 		for _, it := range r.Items {
 			if it.AmountCents <= 0 || !strings.Contains(it.Receiver, "@") {
 				return &Error{Status: 422, Name: "VALIDATION_ERROR", Issue: "RECEIVER_INVALID"}
 			}
-			b.Items = append(b.Items, simItem{ItemID: simID("SIM-ITEM-"), SenderItemID: it.SenderItemID, Receiver: it.Receiver,
+			b.Items = append(b.Items, tmItem{ItemID: tmID("TEST-ITEM-"), SenderItemID: it.SenderItemID, Receiver: it.Receiver,
 				AmountCents: it.AmountCents, Status: "PENDING", SettleAt: settle})
 		}
 		if err := s.put(ctx, q, b.BatchID, "payout_batch", b); err != nil {
@@ -205,7 +205,7 @@ func (s *Sim) CreatePayoutBatch(ctx context.Context, r PayoutBatchRequest) (Payo
 	return out, err
 }
 
-func (b simBatch) view() PayoutBatch {
+func (b tmBatch) view() PayoutBatch {
 	out := PayoutBatch{BatchID: b.BatchID, Status: "SUCCESS"}
 	for _, it := range b.Items {
 		out.Items = append(out.Items, PayoutItem{ItemID: it.ItemID, SenderItemID: it.SenderItemID, Status: it.Status})
@@ -216,10 +216,10 @@ func (b simBatch) view() PayoutBatch {
 	return out
 }
 
-func (s *Sim) GetPayoutBatch(ctx context.Context, batchID string) (PayoutBatch, error) {
+func (s *TestMode) GetPayoutBatch(ctx context.Context, batchID string) (PayoutBatch, error) {
 	var out PayoutBatch
 	err := s.DB.Tx(ctx, func(q db.Q) error {
-		var b simBatch
+		var b tmBatch
 		ok, err := s.get(ctx, q, batchID, &b, true)
 		if err != nil {
 			return err
@@ -252,7 +252,7 @@ func (s *Sim) GetPayoutBatch(ctx context.Context, batchID string) (PayoutBatch, 
 	return out, err
 }
 
-func (s *Sim) CancelPayoutItem(ctx context.Context, itemID string) (PayoutItem, error) {
+func (s *TestMode) CancelPayoutItem(ctx context.Context, itemID string) (PayoutItem, error) {
 	var out PayoutItem
 	err := s.DB.Tx(ctx, func(q db.Q) error {
 		var batchID string
@@ -261,7 +261,7 @@ func (s *Sim) CancelPayoutItem(ctx context.Context, itemID string) (PayoutItem, 
 		} else if !ok {
 			return &Error{Status: 404, Name: "RESOURCE_NOT_FOUND"}
 		}
-		var b simBatch
+		var b tmBatch
 		if _, err := s.get(ctx, q, batchID, &b, true); err != nil {
 			return err
 		}
@@ -282,5 +282,7 @@ func (s *Sim) CancelPayoutItem(ctx context.Context, itemID string) (PayoutItem, 
 	return out, err
 }
 
-// VerifyWebhook never accepts external events in simulator mode: simulated events are injected internally.
-func (s *Sim) VerifyWebhook(context.Context, http.Header, []byte) (bool, error) { return false, nil }
+// VerifyWebhook never accepts external events in test mode: test events are injected internally.
+func (s *TestMode) VerifyWebhook(context.Context, http.Header, []byte) (bool, error) {
+	return false, nil
+}

@@ -51,6 +51,6 @@ func TestConcurrentBootstrapSeedsOnce(t *testing.T) {
 	_ = d.Pool.QueryRow(context.Background(), `SELECT count(*) FROM orders`).Scan(&orders)
 	_ = d.Pool.QueryRow(context.Background(), `SELECT count(*) FROM merchants`).Scan(&merchants)
 	if orders != 12 || merchants != 1 {
-		t.Fatalf("expected one seeded history, got %d orders, %d merchants", orders, merchants)
+		t.Fatalf("expected one order history, got %d orders, %d merchants", orders, merchants)
 	}
 }

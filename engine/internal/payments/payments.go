@@ -1,7 +1,7 @@
-// Package payments owns the money lifecycle (spec 5.3, 7.4, 8): PayPal checkout and capture,
+// Package payments owns the money lifecycle: PayPal checkout and capture,
 // commission reservation, refunds, disputes, vesting, payouts and clawbacks.
 //
-// Every external signal (API response, webhook, simulated event) funnels into idempotent handlers,
+// Every external signal (API response, webhook, testMode event) funnels into idempotent handlers,
 // and Reconcile derives the ledger deltas an order needs from facts (refunded amount, dispute state,
 // payout state). Replays, races and out-of-order webhooks therefore converge on the same books.
 package payments
@@ -41,7 +41,7 @@ var (
 	ErrConflict       = errors.New("conflict")
 	ErrInvalid        = errors.New("invalid request")
 	ErrNotRefundable  = errors.New("order is not refundable")
-	ErrDemoOnly       = errors.New("only available in demo mode")
+	ErrTestToolsOnly  = errors.New("only available when test tools are enabled")
 	ErrAlreadyClaimed = errors.New("payout already claimed")
 )
 
@@ -64,8 +64,8 @@ func (s *Service) log() *slog.Logger {
 	return slog.Default()
 }
 
-// Simulated reports whether money in this deployment is simulated.
-func (s *Service) Simulated() bool { return s.PP.Mode() != "sandbox" }
+// TestMode reports whether money in this deployment is testMode.
+func (s *Service) TestMode() bool { return s.PP.Mode() != "sandbox" }
 
 // CreatedOrder is returned to the browser for the PayPal buttons.
 type CreatedOrder struct {
@@ -75,7 +75,7 @@ type CreatedOrder struct {
 	Mode          string `json:"mode"`
 }
 
-// CreateOrder creates a PayPal order for the product the agent chose (spec 8.2).
+// CreateOrder creates a PayPal order for the product the agent chose.
 // The price always comes from the database, never from the browser.
 func (s *Service) CreateOrder(ctx context.Context, decisionID string) (CreatedOrder, error) {
 	var productID, merchantID, name string
@@ -127,7 +127,7 @@ func (s *Service) CreateOrder(ctx context.Context, decisionID string) (CreatedOr
 	return CreatedOrder{OrderID: orderID, PayPalOrderID: o.ID, AmountCents: price, Mode: s.PP.Mode()}, nil
 }
 
-// Capture captures an approved PayPal order (spec 5.3 step 4). Calling it twice is safe.
+// Capture captures an approved PayPal order. Calling it twice is safe.
 func (s *Service) Capture(ctx context.Context, paypalOrderID string) (string, error) {
 	var orderID, status string
 	err := s.DB.Pool.QueryRow(ctx, `SELECT id, status FROM orders WHERE paypal_order_id=$1`, paypalOrderID).Scan(&orderID, &status)
@@ -153,7 +153,7 @@ func (s *Service) Capture(ctx context.Context, paypalOrderID string) (string, er
 	if err := s.HandleCaptureCompleted(ctx, orderID, c.CaptureID, c.AmountCents, c.PayerEmail); err != nil {
 		return orderID, err
 	}
-	if s.Simulated() {
+	if s.TestMode() {
 		// Exercise the webhook path too, exactly as PayPal would deliver it.
 		_ = s.InjectEvent(ctx, "PAYMENT.CAPTURE.COMPLETED", map[string]any{
 			"id": c.CaptureID, "status": "COMPLETED", "amount": map[string]string{"currency_code": "USD", "value": money.Format(c.AmountCents)},
@@ -189,7 +189,7 @@ func (s *Service) HandleCaptureCompleted(ctx context.Context, orderID, captureID
 		}
 		commission := money.MulBps(orderAmount, rate)
 		if _, err := ledger.Post(ctx, q, ledger.Entry{Type: ledger.CommissionReserved, OrderID: orderID, From: ledger.MerchantFunding, To: ledger.OrderCommission,
-			Amount: commission, IdemKey: ledger.Key("reserve", orderID), Ref: captureID, Memo: "commission reserved at capture", Simulated: mode != "sandbox"}); err != nil {
+			Amount: commission, IdemKey: ledger.Key("reserve", orderID), Ref: captureID, Memo: "commission reserved at capture", TestMode: mode != "sandbox"}); err != nil {
 			return err
 		}
 		if err := attribution.Enqueue(ctx, q, orderID); err != nil {
@@ -206,17 +206,17 @@ func (s *Service) HandleCaptureCompleted(ctx context.Context, orderID, captureID
 type RefundResult struct {
 	RefundID    string `json:"refund_id"`
 	AmountCents int64  `json:"amount_cents"`
-	Simulated   bool   `json:"simulated"`
+	TestMode    bool   `json:"test_mode"`
 }
 
-// Refund refunds all (amount 0) or part of an order through PayPal (spec 8.3).
+// Refund refunds all (amount 0) or part of an order through PayPal.
 func (s *Service) Refund(ctx context.Context, orderID string, amount int64, reason, idemKey string) (RefundResult, error) {
 	var captureID *string
 	var total, refunded int64
 	var status string
-	var seeded bool
-	err := s.DB.Pool.QueryRow(ctx, `SELECT paypal_capture_id, amount_cents, refunded_cents, status, seeded FROM orders WHERE id=$1`, orderID).
-		Scan(&captureID, &total, &refunded, &status, &seeded)
+	var historical bool
+	err := s.DB.Pool.QueryRow(ctx, `SELECT paypal_capture_id, amount_cents, refunded_cents, status, historical FROM orders WHERE id=$1`, orderID).
+		Scan(&captureID, &total, &refunded, &status, &historical)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return RefundResult{}, fmt.Errorf("%w: order %s", ErrNotFound, orderID)
 	}
@@ -233,10 +233,10 @@ func (s *Service) Refund(ctx context.Context, orderID string, amount int64, reas
 	if amount <= 0 || amount > remaining {
 		return RefundResult{}, fmt.Errorf("%w: refund must be between $0.01 and $%s", ErrInvalid, money.Format(remaining))
 	}
-	if seeded || captureID == nil {
-		// Seeded history has no real PayPal capture: book the refund locally, clearly labelled.
-		id := "seeded-refund-" + newID("")
-		return RefundResult{RefundID: id, AmountCents: amount, Simulated: true}, s.HandleRefund(ctx, orderID, id, amount, reason, true)
+	if historical || captureID == nil {
+		// Order history has no PayPal capture: the refund is booked locally.
+		id := "hist-refund-" + newID("")
+		return RefundResult{RefundID: id, AmountCents: amount, TestMode: true}, s.HandleRefund(ctx, orderID, id, amount, reason, true)
 	}
 	if idemKey == "" {
 		idemKey = fmt.Sprintf("refund-%s-%d-%d", orderID, refunded, amount)
@@ -245,27 +245,27 @@ func (s *Service) Refund(ctx context.Context, orderID string, amount int64, reas
 	if err != nil {
 		return RefundResult{}, fmt.Errorf("paypal refund: %w", err)
 	}
-	if err := s.HandleRefund(ctx, orderID, r.ID, r.AmountCents, reason, s.Simulated()); err != nil {
+	if err := s.HandleRefund(ctx, orderID, r.ID, r.AmountCents, reason, s.TestMode()); err != nil {
 		return RefundResult{}, err
 	}
-	if s.Simulated() {
+	if s.TestMode() {
 		_ = s.InjectEvent(ctx, "PAYMENT.CAPTURE.REFUNDED", map[string]any{
 			"id": r.ID, "status": "COMPLETED", "amount": map[string]string{"currency_code": "USD", "value": money.Format(r.AmountCents)},
 			"links": []map[string]string{{"rel": "up", "href": "https://api-m.sandbox.paypal.com/v2/payments/captures/" + *captureID}},
 		})
 	}
-	return RefundResult{RefundID: r.ID, AmountCents: r.AmountCents, Simulated: s.Simulated()}, nil
+	return RefundResult{RefundID: r.ID, AmountCents: r.AmountCents, TestMode: s.TestMode()}, nil
 }
 
-// HandleRefund is the single idempotent refund handler, keyed by refund id (spec 5.3 step 10).
-func (s *Service) HandleRefund(ctx context.Context, orderID, refundID string, amount int64, reason string, simulated bool) error {
+// HandleRefund is the single idempotent refund handler, keyed by refund id.
+func (s *Service) HandleRefund(ctx context.Context, orderID, refundID string, amount int64, reason string, testMode bool) error {
 	return s.DB.Tx(ctx, func(q db.Q) error {
 		var total, refunded int64
 		if err := q.QueryRow(ctx, `SELECT amount_cents, refunded_cents FROM orders WHERE id=$1 FOR UPDATE`, orderID).Scan(&total, &refunded); err != nil {
 			return err
 		}
-		tag, err := q.Exec(ctx, `INSERT INTO refunds (id, order_id, paypal_refund_id, amount_cents, reason, simulated) VALUES ($1,$2,$3,$4,$5,$6)
-			ON CONFLICT (paypal_refund_id) DO NOTHING`, newID("rf_"), orderID, refundID, amount, reason, simulated)
+		tag, err := q.Exec(ctx, `INSERT INTO refunds (id, order_id, paypal_refund_id, amount_cents, reason, test_mode) VALUES ($1,$2,$3,$4,$5,$6)
+			ON CONFLICT (paypal_refund_id) DO NOTHING`, newID("rf_"), orderID, refundID, amount, reason, testMode)
 		if err != nil {
 			return err
 		}
@@ -284,15 +284,15 @@ func (s *Service) HandleRefund(ctx context.Context, orderID, refundID string, am
 	})
 }
 
-// Dispute actions (spec 7.4).
+// Dispute actions.
 const (
 	DisputeOpen          = "open"
 	DisputeResolveSeller = "resolve_seller"
 	DisputeResolveBuyer  = "resolve_buyer"
 )
 
-// HandleDispute applies a dispute event (real webhook or labelled simulation).
-func (s *Service) HandleDispute(ctx context.Context, orderID, action string, simulated bool) error {
+// HandleDispute applies a dispute event (real webhook or labelled test event).
+func (s *Service) HandleDispute(ctx context.Context, orderID, action string, testMode bool) error {
 	var next string
 	switch action {
 	case DisputeOpen:
@@ -321,7 +321,7 @@ func (s *Service) HandleDispute(ctx context.Context, orderID, action string, sim
 		if next == "OPEN" && dispute == "OPEN" {
 			return nil
 		}
-		if _, err := q.Exec(ctx, `UPDATE orders SET dispute_status=$2, dispute_simulated = dispute_simulated OR $3 WHERE id=$1`, orderID, next, simulated); err != nil {
+		if _, err := q.Exec(ctx, `UPDATE orders SET dispute_status=$2, dispute_test = dispute_test OR $3 WHERE id=$1`, orderID, next, testMode); err != nil {
 			return err
 		}
 		return s.reconcile(ctx, q, orderID)
@@ -350,7 +350,7 @@ func (s *Service) reconcile(ctx context.Context, q db.Q, orderID string) error {
 	if dispute == "RESOLVED_BUYER" {
 		lostNum = total // a dispute lost to the buyer is treated as a full refund
 	}
-	simulated := mode != "sandbox"
+	testMode := mode != "sandbox"
 
 	// Accruals per creator (ordered) and the fee.
 	rows, err := q.Query(ctx, `SELECT COALESCE(creator_id,''), SUM(amount_cents)::bigint FROM ledger_entries WHERE order_id=$1 AND type = ANY($2)
@@ -395,14 +395,14 @@ func (s *Service) reconcile(ctx context.Context, q db.Q, orderID string) error {
 	}
 	var entries []ledger.Entry
 	for i, c := range creators {
-		es, err := s.reconcileParty(ctx, q, orderID, c.creatorID, targets[i], dispute, vestedAt != nil, simulated)
+		es, err := s.reconcileParty(ctx, q, orderID, c.creatorID, targets[i], dispute, vestedAt != nil, testMode)
 		if err != nil {
 			return err
 		}
 		entries = append(entries, es...)
 	}
 	if fee.accrued > 0 {
-		es, err := s.reconcileParty(ctx, q, orderID, "", money.MulRatio(fee.accrued, lostNum, total), dispute, vestedAt != nil, simulated)
+		es, err := s.reconcileParty(ctx, q, orderID, "", money.MulRatio(fee.accrued, lostNum, total), dispute, vestedAt != nil, testMode)
 		if err != nil {
 			return err
 		}
@@ -412,7 +412,7 @@ func (s *Service) reconcile(ctx context.Context, q db.Q, orderID string) error {
 	return err
 }
 
-func (s *Service) reconcileParty(ctx context.Context, q db.Q, orderID, creatorID string, target int64, dispute string, vested, simulated bool) ([]ledger.Entry, error) {
+func (s *Service) reconcileParty(ctx context.Context, q db.Q, orderID, creatorID string, target int64, dispute string, vested, testMode bool) ([]ledger.Entry, error) {
 	pending, frozen, vestedAcct := ledger.CreatorPending, ledger.CreatorFrozen, ledger.CreatorVested
 	label := creatorID
 	if creatorID == "" {
@@ -456,7 +456,7 @@ func (s *Service) reconcileParty(ctx context.Context, q db.Q, orderID, creatorID
 	need := target - lost
 	forfeit := func(bucket string, amt int64) {
 		out = append(out, ledger.Entry{Type: ledger.Forfeit, OrderID: orderID, CreatorID: creatorID, From: bucket, To: ledger.MerchantRecovered,
-			Amount: amt, IdemKey: ledger.Key("forfeit", orderID, label, bucket, fmt.Sprint(lost)), Memo: "purchase refunded or disputed: commission forfeited", Simulated: simulated})
+			Amount: amt, IdemKey: ledger.Key("forfeit", orderID, label, bucket, fmt.Sprint(lost)), Memo: "purchase refunded or disputed: commission forfeited", TestMode: testMode})
 		lost += amt
 		bal[bucket] -= amt
 	}
@@ -485,7 +485,7 @@ func (s *Service) reconcileParty(ctx context.Context, q db.Q, orderID, creatorID
 			s.wake()
 		} else if x := min(need, bal[ledger.CreatorPaid]-clawed); x > 0 {
 			out = append(out, ledger.Entry{Type: ledger.Clawback, OrderID: orderID, CreatorID: creatorID, From: ledger.CreatorOwed, To: ledger.MerchantRecovered,
-				Amount: x, IdemKey: ledger.Key("clawback", orderID, label, fmt.Sprint(lost)), Memo: "refund after payout: netted against future payouts", Simulated: simulated})
+				Amount: x, IdemKey: ledger.Key("clawback", orderID, label, fmt.Sprint(lost)), Memo: "refund after payout: netted against future payouts", TestMode: testMode})
 			lost += x
 		}
 	}
@@ -494,7 +494,7 @@ func (s *Service) reconcileParty(ctx context.Context, q db.Q, orderID, creatorID
 		for _, bucket := range []string{pending, vestedAcct} {
 			if x := bal[bucket]; x > 0 {
 				out = append(out, ledger.Entry{Type: ledger.Freeze, OrderID: orderID, CreatorID: creatorID, From: bucket, To: frozen, Amount: x,
-					IdemKey: ledger.Key("freeze", orderID, label, bucket, fmt.Sprint(freezes)), Memo: "dispute opened: frozen", Simulated: simulated})
+					IdemKey: ledger.Key("freeze", orderID, label, bucket, fmt.Sprint(freezes)), Memo: "dispute opened: frozen", TestMode: testMode})
 				freezes++
 				bal[frozen] += x
 				bal[bucket] = 0
@@ -506,7 +506,7 @@ func (s *Service) reconcileParty(ctx context.Context, q db.Q, orderID, creatorID
 			dest = vestedAcct
 		}
 		out = append(out, ledger.Entry{Type: ledger.Unfreeze, OrderID: orderID, CreatorID: creatorID, From: frozen, To: dest, Amount: x,
-			IdemKey: ledger.Key("unfreeze", orderID, label, fmt.Sprint(unfreezes)), Memo: "dispute resolved: released", Simulated: simulated})
+			IdemKey: ledger.Key("unfreeze", orderID, label, fmt.Sprint(unfreezes)), Memo: "dispute resolved: released", TestMode: testMode})
 	}
 	return out, nil
 }
@@ -529,7 +529,7 @@ func (s *Service) unclaimedItemsFor(ctx context.Context, q db.Q, orderID, creato
 	return out, rows.Err()
 }
 
-// VestDue vests every order whose return window has passed cleanly (spec 5.3 step 7). Returns orders vested.
+// VestDue vests every order whose return window has passed cleanly. Returns orders vested.
 func (s *Service) VestDue(ctx context.Context) (int, error) {
 	rows, err := s.DB.Pool.Query(ctx, `SELECT o.id FROM orders o JOIN attribution_jobs a ON a.order_id=o.id AND a.status='DONE'
 		WHERE o.vested_at IS NULL AND o.captured_at IS NOT NULL AND o.vests_at <= now() AND o.dispute_status <> 'OPEN' ORDER BY o.vests_at LIMIT 500`)
@@ -565,7 +565,7 @@ func (s *Service) VestDue(ctx context.Context) (int, error) {
 			for creator, b := range pc {
 				if x := b[ledger.CreatorPending]; x > 0 {
 					entries = append(entries, ledger.Entry{Type: ledger.Vest, OrderID: id, CreatorID: creator, From: ledger.CreatorPending, To: ledger.CreatorVested,
-						Amount: x, IdemKey: ledger.Key("vest", id, creator), Memo: "return window passed with no refund or dispute", Simulated: mode != "sandbox"})
+						Amount: x, IdemKey: ledger.Key("vest", id, creator), Memo: "return window passed with no refund or dispute", TestMode: mode != "sandbox"})
 				}
 			}
 			ob, err := ledger.BalancesFor(ctx, q, ledger.Scope{OrderID: id})
@@ -574,7 +574,7 @@ func (s *Service) VestDue(ctx context.Context) (int, error) {
 			}
 			if x := ob[ledger.SwayPending]; x > 0 {
 				entries = append(entries, ledger.Entry{Type: ledger.Vest, OrderID: id, From: ledger.SwayPending, To: ledger.SwayVested,
-					Amount: x, IdemKey: ledger.Key("vest", id, "sway"), Memo: "Sway fee vested", Simulated: mode != "sandbox"})
+					Amount: x, IdemKey: ledger.Key("vest", id, "sway"), Memo: "Sway fee vested", TestMode: mode != "sandbox"})
 			}
 			if _, err := ledger.Post(ctx, q, entries...); err != nil {
 				return err
@@ -590,10 +590,10 @@ func (s *Service) VestDue(ctx context.Context) (int, error) {
 	return n, nil
 }
 
-// FastForward makes every captured order vest-eligible now (demo only, spec 10).
+// FastForward makes every captured order vest-eligible now (test tools only).
 func (s *Service) FastForward(ctx context.Context) (int64, error) {
-	if !s.Cfg.DemoMode {
-		return 0, ErrDemoOnly
+	if !s.Cfg.TestTools {
+		return 0, ErrTestToolsOnly
 	}
 	tag, err := s.DB.Pool.Exec(ctx, `UPDATE orders SET vests_at=now() WHERE vested_at IS NULL AND captured_at IS NOT NULL AND vests_at > now()`)
 	if err != nil {

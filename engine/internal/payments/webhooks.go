@@ -24,7 +24,7 @@ type event struct {
 	Resource  json.RawMessage `json:"resource"`
 }
 
-// IngestWebhook verifies, stores (deduplicated by event id) and enqueues a PayPal webhook (spec 8.5).
+// IngestWebhook verifies, stores (deduplicated by event id) and enqueues a PayPal webhook.
 // It returns quickly; processing happens in the worker.
 func (s *Service) IngestWebhook(ctx context.Context, h http.Header, body []byte) (duplicate bool, err error) {
 	ok, err := s.PP.VerifyWebhook(ctx, h, body)
@@ -50,11 +50,11 @@ func resourceID(raw json.RawMessage) string {
 	return r.ID
 }
 
-func (s *Service) storeEvent(ctx context.Context, ev event, body []byte, verified, simulated bool) (bool, error) {
+func (s *Service) storeEvent(ctx context.Context, ev event, body []byte, verified, testMode bool) (bool, error) {
 	var inserted bool
 	err := s.DB.Tx(ctx, func(q db.Q) error {
-		tag, err := q.Exec(ctx, `INSERT INTO webhook_events (id, paypal_event_id, event_type, resource_id, verified, simulated, payload) VALUES ($1,$2,$3,$4,$5,$6,$7)
-			ON CONFLICT (paypal_event_id) DO NOTHING`, newID("whe_"), ev.ID, ev.EventType, resourceID(ev.Resource), verified, simulated, body)
+		tag, err := q.Exec(ctx, `INSERT INTO webhook_events (id, paypal_event_id, event_type, resource_id, verified, test_mode, payload) VALUES ($1,$2,$3,$4,$5,$6,$7)
+			ON CONFLICT (paypal_event_id) DO NOTHING`, newID("whe_"), ev.ID, ev.EventType, resourceID(ev.Resource), verified, testMode, body)
 		if err != nil {
 			return err
 		}
@@ -70,15 +70,15 @@ func (s *Service) storeEvent(ctx context.Context, ev event, body []byte, verifie
 	return inserted, err
 }
 
-// InjectEvent records a simulated event and routes it through the same handler a real webhook uses.
-// Used by the PayPal simulator and the merchant's "Simulate dispute" button; always flagged simulated.
+// InjectEvent records a testMode event and routes it through the same handler a real webhook uses.
+// Used by PayPal test mode and the merchant's "Test a dispute" action; always flagged as a test event.
 func (s *Service) InjectEvent(ctx context.Context, eventType string, resource any) error {
 	res, err := json.Marshal(resource)
 	if err != nil {
 		return err
 	}
-	ev := event{ID: newID("SIM-EVT-"), EventType: eventType, Resource: res}
-	body, _ := json.Marshal(map[string]any{"id": ev.ID, "event_type": eventType, "resource": json.RawMessage(res), "simulated": true})
+	ev := event{ID: newID("TEST-EVT-"), EventType: eventType, Resource: res}
+	body, _ := json.Marshal(map[string]any{"id": ev.ID, "event_type": eventType, "resource": json.RawMessage(res), "testMode": true})
 	if _, err := s.storeEvent(ctx, ev, body, false, true); err != nil {
 		return err
 	}
@@ -89,9 +89,9 @@ func (s *Service) InjectEvent(ctx context.Context, eventType string, resource an
 func (s *Service) ProcessWebhook(ctx context.Context, eventID string) error {
 	var typ string
 	var payload []byte
-	var simulated bool
+	var testMode bool
 	var processed *string
-	err := s.DB.Pool.QueryRow(ctx, `SELECT event_type, payload, simulated, processed_at::text FROM webhook_events WHERE paypal_event_id=$1`, eventID).Scan(&typ, &payload, &simulated, &processed)
+	err := s.DB.Pool.QueryRow(ctx, `SELECT event_type, payload, test_mode, processed_at::text FROM webhook_events WHERE paypal_event_id=$1`, eventID).Scan(&typ, &payload, &testMode, &processed)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
@@ -105,7 +105,7 @@ func (s *Service) ProcessWebhook(ctx context.Context, eventID string) error {
 	if err := json.Unmarshal(payload, &ev); err != nil {
 		return err
 	}
-	outcome, err := s.route(ctx, typ, ev.Resource, simulated)
+	outcome, err := s.route(ctx, typ, ev.Resource, testMode)
 	if err != nil {
 		return err
 	}
@@ -138,7 +138,7 @@ func captureFromLinks(raw json.RawMessage) string {
 	return ""
 }
 
-func (s *Service) route(ctx context.Context, typ string, res json.RawMessage, simulated bool) (string, error) {
+func (s *Service) route(ctx context.Context, typ string, res json.RawMessage, testMode bool) (string, error) {
 	switch typ {
 	case "CHECKOUT.ORDER.APPROVED":
 		id := resourceID(res)
@@ -203,7 +203,7 @@ func (s *Service) route(ctx context.Context, typ string, res json.RawMessage, si
 		if typ == "PAYMENT.CAPTURE.REVERSED" {
 			refundID = "reversal-" + r.ID
 		}
-		if err := s.HandleRefund(ctx, orderID, refundID, amt, strings.ToLower(strings.TrimPrefix(typ, "PAYMENT.CAPTURE.")), simulated); err != nil {
+		if err := s.HandleRefund(ctx, orderID, refundID, amt, strings.ToLower(strings.TrimPrefix(typ, "PAYMENT.CAPTURE.")), testMode); err != nil {
 			return "", err
 		}
 		return "refund applied (idempotent)", nil
@@ -217,7 +217,7 @@ func (s *Service) route(ctx context.Context, typ string, res json.RawMessage, si
 			Outcome struct {
 				Code string `json:"outcome_code"`
 			} `json:"dispute_outcome"`
-			SwayOrderID string `json:"sway_order_id"` // set by simulated disputes only
+			SwayOrderID string `json:"sway_order_id"` // set by testMode disputes only
 		}
 		if err := json.Unmarshal(res, &r); err != nil {
 			return "", err
@@ -239,7 +239,7 @@ func (s *Service) route(ctx context.Context, typ string, res json.RawMessage, si
 				action = DisputeResolveBuyer
 			}
 		}
-		if err := s.HandleDispute(ctx, orderID, action, simulated); err != nil && !errors.Is(err, ErrInvalid) {
+		if err := s.HandleDispute(ctx, orderID, action, testMode); err != nil && !errors.Is(err, ErrInvalid) {
 			return "", err
 		}
 		return "dispute " + action, nil
@@ -275,10 +275,10 @@ func (s *Service) route(ctx context.Context, typ string, res json.RawMessage, si
 	return "ignored: unhandled event type", nil
 }
 
-// SimulateDispute injects a clearly labelled dispute event for an order (spec 8.6, demo only).
-func (s *Service) SimulateDispute(ctx context.Context, orderID, action string) error {
-	if !s.Cfg.DemoMode {
-		return ErrDemoOnly
+// TestDispute injects a clearly labelled dispute event for an order (test tools only).
+func (s *Service) TestDispute(ctx context.Context, orderID, action string) error {
+	if !s.Cfg.TestTools {
+		return ErrTestToolsOnly
 	}
 	typ := "CUSTOMER.DISPUTE.CREATED"
 	res := map[string]any{"sway_order_id": orderID, "status": "OPEN", "reason": "MERCHANDISE_OR_SERVICE_NOT_AS_DESCRIBED"}

@@ -40,7 +40,7 @@ export default function Home() {
           </button>
         </div>
 
-        <ul className="mt-12 grid max-w-3xl grid-cols-2 gap-px overflow-hidden rounded-2xl border border-line bg-line sm:grid-cols-4" aria-label="Live demo totals">
+        <ul className="mt-12 grid max-w-3xl grid-cols-2 gap-px overflow-hidden rounded-2xl border border-line bg-line sm:grid-cols-4" aria-label="Live marketplace totals">
           {[
             ["Agent-driven sales", k ? usd(k.agent_revenue_cents) : "…"],
             ["Paid to creators", k ? usd(k.commission_paid_cents) : "…"],
@@ -112,7 +112,7 @@ export default function Home() {
 
       <footer className="border-t border-line">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-6 text-xs text-muted sm:px-6">
-          <span>Sway · Built for “Build What&apos;s Next with PayPal and AI”. Sandbox only: no real money, every brand and creator is fictional.</span>
+          <span>Sway · Built for “Build What&apos;s Next with PayPal and AI”. Runs on PayPal Sandbox. Every brand and creator in the catalog is original to Sway.</span>
           <span>
             <a className="link" href="https://github.com/vivekyarra/sway">Source (MIT)</a>
           </span>

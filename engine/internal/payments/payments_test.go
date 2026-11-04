@@ -206,7 +206,7 @@ func TestE6DisputeResolvedForSeller(t *testing.T) {
 	m := testkit.New(t).WithMoney(t)
 	ctx := context.Background()
 	orderID, _ := m.Buy(t, headphones)
-	if err := m.Pay.SimulateDispute(ctx, orderID, payments.DisputeOpen); err != nil {
+	if err := m.Pay.TestDispute(ctx, orderID, payments.DisputeOpen); err != nil {
 		t.Fatal(err)
 	}
 	if b := bal(t, m, "c_priya"); b.Frozen == 0 || b.Pending != 0 {
@@ -215,7 +215,7 @@ func TestE6DisputeResolvedForSeller(t *testing.T) {
 	if plan := m.VestAndPay(t); plan.Items != 0 {
 		t.Fatal("frozen money must not vest or pay")
 	}
-	if err := m.Pay.SimulateDispute(ctx, orderID, payments.DisputeResolveSeller); err != nil {
+	if err := m.Pay.TestDispute(ctx, orderID, payments.DisputeResolveSeller); err != nil {
 		t.Fatal(err)
 	}
 	if b := bal(t, m, "c_priya"); b.Frozen != 0 || b.Pending == 0 {
@@ -224,10 +224,10 @@ func TestE6DisputeResolvedForSeller(t *testing.T) {
 	if plan := m.VestAndPay(t); plan.Items != 2 {
 		t.Fatalf("expected payouts after release, got %+v", plan)
 	}
-	var simulated bool
-	_ = m.DB.Pool.QueryRow(ctx, `SELECT bool_and(simulated) FROM webhook_events WHERE event_type LIKE 'CUSTOMER.DISPUTE%'`).Scan(&simulated)
-	if !simulated {
-		t.Fatal("simulated disputes must be labelled")
+	var testMode bool
+	_ = m.DB.Pool.QueryRow(ctx, `SELECT bool_and(test_mode) FROM webhook_events WHERE event_type LIKE 'CUSTOMER.DISPUTE%'`).Scan(&testMode)
+	if !testMode {
+		t.Fatal("testMode disputes must be labelled")
 	}
 	checkBooks(t, m)
 }
@@ -237,8 +237,8 @@ func TestE7DisputeResolvedForBuyer(t *testing.T) {
 	m := testkit.New(t).WithMoney(t)
 	ctx := context.Background()
 	orderID, _ := m.Buy(t, headphones)
-	_ = m.Pay.SimulateDispute(ctx, orderID, payments.DisputeOpen)
-	if err := m.Pay.SimulateDispute(ctx, orderID, payments.DisputeResolveBuyer); err != nil {
+	_ = m.Pay.TestDispute(ctx, orderID, payments.DisputeOpen)
+	if err := m.Pay.TestDispute(ctx, orderID, payments.DisputeResolveBuyer); err != nil {
 		t.Fatal(err)
 	}
 	b := bal(t, m, "c_priya")
@@ -316,7 +316,7 @@ func countEntries(t *testing.T, m *testkit.Money) int {
 	return n
 }
 
-// Spec 7.4: refund after payout while the payout item is still UNCLAIMED -> cancel item, reverse, forfeit.
+// refund after payout while the payout item is still UNCLAIMED -> cancel item, reverse, forfeit.
 func TestRefundAfterUnclaimedPayoutCancels(t *testing.T) {
 	m := testkit.New(t).WithMoney(t)
 	ctx := context.Background()

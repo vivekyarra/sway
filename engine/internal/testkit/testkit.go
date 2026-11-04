@@ -1,4 +1,4 @@
-// Package testkit wires a seeded database, sim agent and services for integration tests.
+// Package testkit wires a fully loaded database, the local agent and services for integration tests.
 package testkit
 
 import (
@@ -27,7 +27,7 @@ type Kit struct {
 	Cfg   config.Config
 }
 
-// New returns a fully seeded environment on a fresh database with the deterministic agent.
+// New returns a fully loaded environment on a fresh database with the deterministic agent.
 func New(t testing.TB) *Kit {
 	t.Helper()
 	d := testdb.New(t)
@@ -41,7 +41,7 @@ func New(t testing.TB) *Kit {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ag := agent.New(d, agent.Sim{}, cfg.LLM.Concurrency, cfg.Attribution.Tau)
+	ag := agent.New(d, agent.Local{}, cfg.LLM.Concurrency, cfg.Attribution.Tau)
 	cats := w.Categories
 	sh := &shop.Service{DB: d, Agent: ag, Categories: cats, Samples: cfg.Attribution.Samples, MaxSources: cfg.Attribution.MaxSources}
 	at := &attribution.Runner{DB: d, Agent: ag, Shop: sh, Cfg: cfg.Attribution}
@@ -52,13 +52,13 @@ func New(t testing.TB) *Kit {
 func (k *Kit) InsertOrder(t testing.TB, id, decisionID, productID string, amount int64) {
 	t.Helper()
 	_, err := k.DB.Pool.Exec(context.Background(), `INSERT INTO orders (id, decision_id, product_id, merchant_id, amount_cents, commission_rate_bps, sway_fee_bps, payment_mode, status, captured_at)
-		VALUES ($1,$2,$3,'m_larkline',$4,800,1500,'sim','CAPTURED',now())`, id, decisionID, productID, amount)
+		VALUES ($1,$2,$3,'m_larkline',$4,800,1500,'test','CAPTURED',now())`, id, decisionID, productID, amount)
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
-// Money wires the payment layer (PayPal simulator) and a job worker onto the kit.
+// Money wires the payment layer (PayPal test mode) and a job worker onto the kit.
 type Money struct {
 	*Kit
 	Pay    *payments.Service
@@ -67,8 +67,8 @@ type Money struct {
 
 func (k *Kit) WithMoney(t testing.TB) *Money {
 	t.Helper()
-	sim := &paypal.Sim{DB: k.DB}
-	pay := &payments.Service{DB: k.DB, PP: sim, Cfg: k.Cfg}
+	tm := &paypal.TestMode{DB: k.DB}
+	pay := &payments.Service{DB: k.DB, PP: tm, Cfg: k.Cfg}
 	k.Attr.AfterAllocate = pay.Reconcile
 	handlers := pay.JobHandlers()
 	handlers[jobs.TypeAttribution] = func(ctx context.Context, j jobs.Job) error {

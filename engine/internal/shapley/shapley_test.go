@@ -16,7 +16,7 @@ func table(n int, f func(mask uint32) float64) Values {
 	return v
 }
 
-// Spec 13.1 #1: additive game -> φ_i equals its weight.
+// additive game -> φ_i equals its weight.
 func TestAdditiveGame(t *testing.T) {
 	w := []float64{0.1, 0.25, -0.05, 0, 0.4, 0.3}
 	v := table(len(w), func(m uint32) float64 {

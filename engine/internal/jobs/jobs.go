@@ -209,7 +209,7 @@ func (w *Worker) recoverStale(ctx context.Context) {
 	}
 }
 
-// Drain runs ready jobs until none remain (tests and the demo fast-forward use it).
+// Drain runs ready jobs until none remain (tests and the fast-forward tool use it).
 func (w *Worker) Drain(ctx context.Context, max int) error {
 	for i := 0; i < max; i++ {
 		ran, err := w.RunOne(ctx)

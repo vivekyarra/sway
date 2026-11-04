@@ -13,16 +13,16 @@ import (
 	"github.com/vivekyarra/sway/engine/internal/catalog"
 )
 
-// Sim is a deterministic, offline shopping agent used when no Anthropic key is configured.
+// Local is Sway's built-in, deterministic reasoning engine, used when no Anthropic key is configured.
 //
 // It genuinely reads the sources: a lexical extractor finds (product, aspect, polarity) claims in
 // each sentence, with negation ("never felt any pressure"), comparatives ("better than") and pronoun
 // carry-over. Evidence saturates (tanh), so sources interact non-additively, which is exactly what
-// makes Shapley attribution meaningful. A tiny hash-seeded jitter per sample mimics LLM sampling noise.
-type Sim struct{}
+// makes Shapley attribution meaningful. A tiny hash-historical jitter per sample mimics LLM sampling noise.
+type Local struct{}
 
-func (Sim) Name() string  { return "sim" }
-func (Sim) Model() string { return "sway-sim-v2" }
+func (Local) Name() string  { return "local" }
+func (Local) Model() string { return "sway-local-v2" }
 
 // Aspect lexicons. Request needs and source evidence share the aspect vocabulary.
 // needLexicon maps aspect -> request term -> weight. A need's weight is the max of its matched terms.
@@ -256,7 +256,7 @@ func Needs(request string) map[string]float64 {
 	return needs
 }
 
-// simulation constants (tuned so the seeded flip is decisive, see agent_test.go)
+// engine constants (tuned so the curated flip is decisive, see local_test.go)
 const (
 	evidenceGain   = 0.42 // how far strong evidence can move an aspect (on a 0..1 spec scale)
 	evidenceScale  = 1.6  // saturation scale for tanh
@@ -271,7 +271,7 @@ type scored struct {
 	evidence map[string]map[string]float64 // aspect -> source -> strength
 }
 
-func (s Sim) score(in Input, sample int, key string) ([]scored, map[string]float64, []Claim) {
+func (s Local) score(in Input, sample int, key string) ([]scored, map[string]float64, []Claim) {
 	needs := Needs(in.Request)
 	// Only aspects that some candidate has a spec score for (or price) are meaningful in this category.
 	present := map[string]bool{"price": true}
@@ -355,7 +355,7 @@ func jitter(key, pid string) float64 {
 }
 
 // Decide scores every candidate deterministically for (input, sample).
-func (s Sim) Decide(_ context.Context, in Input, sample int) (Output, error) {
+func (s Local) Decide(_ context.Context, in Input, sample int) (Output, error) {
 	in = in.Normalize()
 	key := CacheKey(s.Name(), s.Model(), in, sample)
 	scs, needs, _ := s.score(in, sample, key)
@@ -509,8 +509,8 @@ func rationale(in Input, scs []scored, best, runner int, needs map[string]float6
 	return ids, b.String()
 }
 
-// SimExplain writes a creator explanation from the extracted claims (no numbers, no invented facts).
-func SimExplain(e ExplainInput) string {
+// LocalExplain writes a creator explanation from the extracted claims (no numbers, nothing beyond the extracted claims).
+func LocalExplain(e ExplainInput) string {
 	if !e.Positive {
 		return "Your content argued for a different product, so it did not push the agent toward this purchase and earns nothing on it. That is how Sway keeps rewards tied to the decision itself."
 	}

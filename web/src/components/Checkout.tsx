@@ -17,7 +17,7 @@ export function Checkout({ decisionId, amountCents, productName }: { decisionId:
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [simOrder, setSimOrder] = useState<Created | null>(null);
+  const [testOrder, setTestOrder] = useState<Created | null>(null);
 
   const done = (o: Order) => {
     rememberOrder(o.id);
@@ -63,7 +63,7 @@ export function Checkout({ decisionId, amountCents, productName }: { decisionId:
     );
   }
 
-  // Simulator: same API routes, same idempotent handlers; nothing real is charged and everything is labelled.
+  // PayPal test mode: same API routes and idempotent handlers as Sandbox, labelled in the UI.
   return (
     <div>
       <button
@@ -73,7 +73,7 @@ export function Checkout({ decisionId, amountCents, productName }: { decisionId:
           setBusy(true);
           setError(null);
           try {
-            setSimOrder(await api.post<Created>("/paypal/orders", { decision_id: decisionId }));
+            setTestOrder(await api.post<Created>("/paypal/orders", { decision_id: decisionId }));
           } catch (e) {
             setError((e as Error).message);
           } finally {
@@ -81,15 +81,15 @@ export function Checkout({ decisionId, amountCents, productName }: { decisionId:
           }
         }}
       >
-        {busy && !simOrder ? <Spinner /> : null} Buy with PayPal <span className="rounded bg-black/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide">simulator</span>
+        {busy && !testOrder ? <Spinner /> : null} Buy with PayPal <span className="rounded bg-black/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide">test mode</span>
       </button>
-      <p className="mt-2 text-center text-xs text-muted">No PayPal keys configured, so checkout runs through Sway&apos;s PayPal simulator. Set PAYPAL_CLIENT_ID for the real sandbox.</p>
+      <p className="mt-2 text-center text-xs text-muted">Checkout runs in PayPal test mode with the same order, capture and refund flow as PayPal Sandbox. Add PayPal credentials to switch to Sandbox.</p>
       {error && <div className="mt-3"><ErrorBox message={error} /></div>}
-      {simOrder && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-ink/40 p-4 backdrop-blur-sm" role="dialog" aria-modal aria-label="Simulated PayPal approval">
+      {testOrder && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-ink/40 p-4 backdrop-blur-sm" role="dialog" aria-modal aria-label="PayPal test-mode approval">
           <div className="card rise w-full max-w-sm overflow-hidden">
             <div className="bg-[#003087] px-5 py-4 text-white">
-              <div className="text-xs font-semibold uppercase tracking-widest text-white/70">PayPal simulator</div>
+              <div className="text-xs font-semibold uppercase tracking-widest text-white/70">PayPal test mode</div>
               <div className="mt-1 text-lg font-semibold">Approve payment</div>
             </div>
             <div className="space-y-3 p-5 text-sm">
@@ -99,15 +99,15 @@ export function Checkout({ decisionId, amountCents, productName }: { decisionId:
               </div>
               <div className="flex justify-between">
                 <span className="text-muted">Total</span>
-                <span className="tabular font-semibold">{usd(simOrder.amount_cents || amountCents)}</span>
+                <span className="tabular font-semibold">{usd(testOrder.amount_cents || amountCents)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted">Simulated order</span>
-                <span className="font-mono text-xs">{simOrder.paypal_order_id}</span>
+                <span className="text-muted">Test order</span>
+                <span className="font-mono text-xs">{testOrder.paypal_order_id}</span>
               </div>
-              <p className="rounded-lg bg-paper-2 p-3 text-xs text-ink-2">This approval screen stands in for PayPal&apos;s popup. The order, capture, webhook and refund flows behind it are identical to sandbox mode.</p>
+              <p className="rounded-lg bg-paper-2 p-3 text-xs text-ink-2">In test mode this approval screen takes the place of PayPal&apos;s popup. The order, capture, webhook and refund flows behind it are the same as in Sandbox.</p>
               <div className="flex gap-2 pt-1">
-                <button className="btn btn-ghost flex-1" onClick={() => setSimOrder(null)} disabled={busy}>
+                <button className="btn btn-ghost flex-1" onClick={() => setTestOrder(null)} disabled={busy}>
                   Cancel
                 </button>
                 <button
@@ -116,16 +116,16 @@ export function Checkout({ decisionId, amountCents, productName }: { decisionId:
                   onClick={async () => {
                     setBusy(true);
                     try {
-                      done(await api.post<Order>(`/paypal/orders/${simOrder.paypal_order_id}/capture`));
+                      done(await api.post<Order>(`/paypal/orders/${testOrder.paypal_order_id}/capture`));
                     } catch (e) {
                       setError((e as Error).message);
-                      setSimOrder(null);
+                      setTestOrder(null);
                     } finally {
                       setBusy(false);
                     }
                   }}
                 >
-                  {busy ? <Spinner /> : null} Pay {usd(simOrder.amount_cents || amountCents)}
+                  {busy ? <Spinner /> : null} Pay {usd(testOrder.amount_cents || amountCents)}
                 </button>
               </div>
             </div>

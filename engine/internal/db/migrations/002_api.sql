@@ -10,7 +10,7 @@ CREATE TABLE idempotency_keys (
 );
 CREATE INDEX idempotency_keys_created_idx ON idempotency_keys(created_at);
 
--- TRUNCATE bypasses row triggers, so guard it explicitly: only a demo reset may wipe the books.
+-- TRUNCATE bypasses row triggers, so guard it explicitly: only an admin reset may wipe the books.
 CREATE TRIGGER ledger_no_truncate BEFORE TRUNCATE ON ledger_entries
   FOR EACH STATEMENT EXECUTE FUNCTION sway_append_only();
 CREATE TRIGGER attributions_no_truncate BEFORE TRUNCATE ON attributions

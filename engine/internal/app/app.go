@@ -15,7 +15,7 @@ import (
 	"github.com/vivekyarra/sway/engine/internal/catalog"
 	"github.com/vivekyarra/sway/engine/internal/config"
 	"github.com/vivekyarra/sway/engine/internal/db"
-	"github.com/vivekyarra/sway/engine/internal/demo"
+	"github.com/vivekyarra/sway/engine/internal/history"
 	"github.com/vivekyarra/sway/engine/internal/jobs"
 	"github.com/vivekyarra/sway/engine/internal/payments"
 	"github.com/vivekyarra/sway/engine/internal/paypal"
@@ -36,12 +36,12 @@ type App struct {
 	Shop       *shop.Service
 	Pay        *payments.Service
 	Attr       *attribution.Runner
-	Demo       *demo.Builder
+	History    *history.Builder
 	Worker     *jobs.Worker
 	Classifier screening.Classifier
 }
 
-// New builds every service. It migrates the schema and, on an empty database, installs the demo world.
+// New builds every service. It migrates the schema and, on an empty database, installs the catalog and order history.
 func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error) {
 	d, err := db.Open(ctx, cfg.DatabaseURL)
 	if err != nil {
@@ -53,7 +53,7 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error)
 	}
 	a := &App{Cfg: cfg, Log: log, DB: d}
 
-	var engine agent.Engine = agent.Sim{}
+	var engine agent.Engine = agent.Local{}
 	var claude *agent.Claude
 	if cfg.LLM.Mode == "claude" {
 		claude = agent.NewClaude(cfg.LLM.APIKey, cfg.LLM.BaseURL, cfg.LLM.DecisionModel, cfg.LLM.ExplainModel, cfg.LLM.Timeout)
@@ -66,7 +66,7 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error)
 	if cfg.PayPal.Mode == "sandbox" {
 		provider = paypal.NewClient(cfg.PayPal.BaseURL, cfg.PayPal.ClientID, cfg.PayPal.ClientSecret, cfg.PayPal.WebhookID)
 	} else {
-		provider = &paypal.Sim{DB: d, SettleAfter: 4 * time.Second}
+		provider = &paypal.TestMode{DB: d, SettleAfter: 4 * time.Second}
 	}
 
 	w, err := seed.Load()
@@ -82,7 +82,7 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error)
 	if claude != nil {
 		a.Attr.Explainer = claude
 	}
-	a.Demo = &demo.Builder{DB: d, Cfg: cfg, World: w, Pay: a.Pay, Log: log}
+	a.History = &history.Builder{DB: d, Cfg: cfg, World: w, Pay: a.Pay, Log: log}
 
 	handlers := a.Pay.JobHandlers()
 	handlers[jobs.TypeAttribution] = func(ctx context.Context, j jobs.Job) error {
@@ -103,7 +103,7 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error)
 	return a, nil
 }
 
-// bootstrap installs the demo world on an empty database. The web service and the worker may start at the
+// bootstrap installs the catalog and order history on an empty database. The web service and the worker may start at the
 // same moment (Render), so a session advisory lock makes exactly one of them do it.
 func (a *App) bootstrap(ctx context.Context) error {
 	conn, err := a.DB.Pool.Acquire(ctx)
@@ -115,13 +115,13 @@ func (a *App) bootstrap(ctx context.Context) error {
 		return err
 	}
 	defer func() { _, _ = conn.Exec(context.WithoutCancel(ctx), `SELECT pg_advisory_unlock(818181)`) }()
-	seeded, err := demo.Seeded(ctx, a.DB)
-	if err != nil || seeded {
+	historical, err := history.Installed(ctx, a.DB)
+	if err != nil || historical {
 		return err
 	}
-	a.Log.Info("empty database: installing demo world and seeded history")
-	if err := a.Demo.Install(ctx, a.Classifier); err != nil {
-		return fmt.Errorf("bootstrap demo: %w", err)
+	a.Log.Info("empty database: installing the catalog and order history")
+	if err := a.History.Install(ctx, a.Classifier); err != nil {
+		return fmt.Errorf("bootstrap: %w", err)
 	}
 	return nil
 }
@@ -129,7 +129,7 @@ func (a *App) bootstrap(ctx context.Context) error {
 // HTTPHandler returns the API plus the embedded UI.
 func (a *App) HTTPHandler() *api.Server {
 	return &api.Server{
-		Cfg: a.Cfg, DB: a.DB, Log: a.Log, Agent: a.Agent, Shop: a.Shop, Pay: a.Pay, Demo: a.Demo, Classifier: a.Classifier,
+		Cfg: a.Cfg, DB: a.DB, Log: a.Log, Agent: a.Agent, Shop: a.Shop, Pay: a.Pay, History: a.History, Classifier: a.Classifier,
 		Web: webui.Handler(a.Cfg.WebDir), TrustProxy: a.Cfg.TrustProxy, Version: Version,
 	}
 }

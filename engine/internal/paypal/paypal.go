@@ -1,5 +1,5 @@
 // Package paypal talks to PayPal's REST APIs (Orders v2, Payments refunds, Payouts, Webhooks)
-// behind a Provider interface, with an in-database simulator for keyless local runs.
+// behind a Provider interface, with a built-in test mode for keyless local runs.
 package paypal
 
 import (
@@ -11,7 +11,7 @@ import (
 
 // Provider is everything Sway needs from a payment processor.
 type Provider interface {
-	Mode() string // "sandbox" or "sim"
+	Mode() string // "sandbox" or "test"
 	CreateOrder(ctx context.Context, r CreateOrderRequest) (Order, error)
 	CaptureOrder(ctx context.Context, paypalOrderID, requestID string) (Capture, error)
 	RefundCapture(ctx context.Context, captureID string, amountCents int64, requestID, note string) (Refund, error)

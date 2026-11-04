@@ -21,7 +21,7 @@ import (
 	"github.com/vivekyarra/sway/engine/internal/db"
 )
 
-// Entry types (spec 7.3, plus CLAWBACK_OFFSET for netting owed balances against later payouts).
+// Entry types.
 const (
 	CommissionReserved   = "COMMISSION_RESERVED"
 	AccruePending        = "ACCRUE_PENDING"
@@ -77,7 +77,7 @@ type Entry struct {
 	Signed    int64     `json:"signed_cents"`
 	Ref       string    `json:"ref,omitempty"`
 	Memo      string    `json:"memo,omitempty"`
-	Simulated bool      `json:"simulated"`
+	TestMode  bool      `json:"test_mode"`
 	PrevHash  string    `json:"prev_hash"`
 	Hash      string    `json:"hash"`
 	CreatedAt time.Time `json:"created_at"`
@@ -112,7 +112,7 @@ func hashEntry(prev string, e Entry) string {
 	fields := []string{
 		prev, e.ID, e.IdemKey, e.Type, e.OrderID, e.CreatorID, e.From, e.To,
 		strconv.FormatInt(e.Amount, 10), strconv.FormatInt(e.Signed, 10), e.Ref, e.Memo,
-		strconv.FormatBool(e.Simulated), e.CreatedAt.UTC().Format(time.RFC3339Nano),
+		strconv.FormatBool(e.TestMode), e.CreatedAt.UTC().Format(time.RFC3339Nano),
 	}
 	for _, f := range fields {
 		h.Write([]byte(strconv.Itoa(len(f))))
@@ -160,9 +160,9 @@ func Post(ctx context.Context, q db.Q, entries ...Entry) ([]Entry, error) {
 		e.PrevHash = prev
 		e.Hash = hashEntry(prev, e)
 		err := q.QueryRow(ctx, `INSERT INTO ledger_entries
-			(id, idem_key, type, order_id, creator_id, from_account, to_account, amount_cents, signed_cents, ref, memo, simulated, prev_hash, hash, created_at)
+			(id, idem_key, type, order_id, creator_id, from_account, to_account, amount_cents, signed_cents, ref, memo, test_mode, prev_hash, hash, created_at)
 			VALUES ($1,$2,$3,NULLIF($4,''),NULLIF($5,''),$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING seq`,
-			e.ID, e.IdemKey, e.Type, e.OrderID, e.CreatorID, e.From, e.To, e.Amount, e.Signed, e.Ref, e.Memo, e.Simulated, e.PrevHash, e.Hash, e.CreatedAt,
+			e.ID, e.IdemKey, e.Type, e.OrderID, e.CreatorID, e.From, e.To, e.Amount, e.Signed, e.Ref, e.Memo, e.TestMode, e.PrevHash, e.Hash, e.CreatedAt,
 		).Scan(&e.Seq)
 		if err != nil {
 			return nil, fmt.Errorf("ledger insert %s: %w", e.IdemKey, err)
@@ -229,7 +229,7 @@ func Verify(ctx context.Context, q db.Q) (Verification, error) {
 // It returns the verification (Entries counts only the tail) and the last seq checked.
 func VerifyAfter(ctx context.Context, q db.Q, afterSeq int64, prevHash string) (Verification, int64, error) {
 	rows, err := q.Query(ctx, `SELECT seq, id, idem_key, type, COALESCE(order_id,''), COALESCE(creator_id,''), from_account, to_account,
-		amount_cents, signed_cents, ref, memo, simulated, prev_hash, hash, created_at FROM ledger_entries WHERE seq > $1 ORDER BY seq`, afterSeq)
+		amount_cents, signed_cents, ref, memo, test_mode, prev_hash, hash, created_at FROM ledger_entries WHERE seq > $1 ORDER BY seq`, afterSeq)
 	if err != nil {
 		return Verification{}, afterSeq, err
 	}
@@ -240,7 +240,7 @@ func VerifyAfter(ctx context.Context, q db.Q, afterSeq int64, prevHash string) (
 	for rows.Next() {
 		var e Entry
 		if err := rows.Scan(&e.Seq, &e.ID, &e.IdemKey, &e.Type, &e.OrderID, &e.CreatorID, &e.From, &e.To, &e.Amount, &e.Signed,
-			&e.Ref, &e.Memo, &e.Simulated, &e.PrevHash, &e.Hash, &e.CreatedAt); err != nil {
+			&e.Ref, &e.Memo, &e.TestMode, &e.PrevHash, &e.Hash, &e.CreatedAt); err != nil {
 			return v, last, err
 		}
 		v.Entries++

@@ -11,17 +11,17 @@ import (
 	"testing"
 
 	"github.com/vivekyarra/sway/engine/internal/api"
-	"github.com/vivekyarra/sway/engine/internal/demo"
+	"github.com/vivekyarra/sway/engine/internal/history"
 	"github.com/vivekyarra/sway/engine/internal/testkit"
 )
 
 func server(t *testing.T, demoMode bool) (*httptest.Server, *testkit.Money) {
 	t.Helper()
 	m := testkit.New(t).WithMoney(t)
-	m.Cfg.DemoMode = demoMode
-	m.Pay.Cfg.DemoMode = demoMode
+	m.Cfg.TestTools = demoMode
+	m.Pay.Cfg.TestTools = demoMode
 	s := &api.Server{Cfg: m.Cfg, DB: m.DB, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Agent: m.Agent, Shop: m.Shop, Pay: m.Pay,
-		Demo: &demo.Builder{DB: m.DB, Cfg: m.Cfg, World: m.World, Pay: m.Pay}, Version: "test"}
+		History: &history.Builder{DB: m.DB, Cfg: m.Cfg, World: m.World, Pay: m.Pay}, Version: "test"}
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(ts.Close)
 	return ts, m
@@ -116,13 +116,13 @@ func TestHardening(t *testing.T) {
 			t.Fatalf("missing header %s", h)
 		}
 	}
-	// Demo-only routes do not exist in production mode (spec 10).
-	for _, p := range []string{"/api/demo/reset", "/api/demo/fast-forward", "/api/merchant/orders/x/simulate-dispute"} {
+	// Test-tool routes do not exist in production mode.
+	for _, p := range []string{"/api/admin/reset", "/api/admin/fast-forward", "/api/merchant/orders/x/test-dispute"} {
 		if resp, _ := call(t, ts, "POST", p, `{}`, nil); resp.StatusCode != 404 {
-			t.Fatalf("%s should 404 outside demo mode, got %d", p, resp.StatusCode)
+			t.Fatalf("%s should 404 without test tools, got %d", p, resp.StatusCode)
 		}
 	}
-	// The simulator never accepts external webhooks; forged events are rejected.
+	// Test mode never accepts external webhooks; forged events are rejected.
 	resp, _ = call(t, ts, "POST", "/api/webhooks/paypal", `{"id":"WH-1","event_type":"PAYMENT.CAPTURE.REFUNDED","resource":{}}`, nil)
 	if resp.StatusCode != 400 {
 		t.Fatalf("forged webhook must be rejected, got %d", resp.StatusCode)

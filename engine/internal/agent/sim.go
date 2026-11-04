@@ -22,7 +22,7 @@ import (
 type Sim struct{}
 
 func (Sim) Name() string  { return "sim" }
-func (Sim) Model() string { return "sway-sim-v1" }
+func (Sim) Model() string { return "sway-sim-v2" }
 
 // Aspect lexicons. Request needs and source evidence share the aspect vocabulary.
 // needLexicon maps aspect -> request term -> weight. A need's weight is the max of its matched terms.
@@ -436,24 +436,48 @@ func rationale(in Input, scs []scored, best, runner int, needs map[string]float6
 		return reasons[i].src < reasons[j].src
 	})
 	relied := map[string]bool{}
-	var parts []string
-	used := map[string]bool{}
+	// Group the strongest reasons by (source, product) so one source reads as one clause:
+	// "Dev Okafor (transcript) reports the Brisane ANC2 cancels noise better and lasts longer on a charge".
+	type clause struct {
+		src, about string
+		phrases    []string
+	}
+	var clauses []*clause
+	index := map[string]*clause{}
 	for _, r := range reasons {
 		if r.impact <= 0.3 {
 			break
 		}
 		relied[r.src] = true
-		if len(parts) >= 2 || used[r.src+r.aspect] {
-			continue
-		}
-		used[r.src+r.aspect] = true
 		p := aspectPhrase[r.aspect]
 		phrase := p[0]
 		if !r.positive {
 			phrase = p[1]
 		}
-		name := byID[r.about].Name
-		parts = append(parts, fmt.Sprintf("%s (%s) reports the %s %s", srcByID[r.src].CreatorName, srcByID[r.src].Type, name, phrase))
+		k := r.src // one clause per source: its mirror-image claim about the runner-up adds nothing
+		c, ok := index[k]
+		if ok && c.about != r.about {
+			continue
+		}
+		if !ok {
+			if len(clauses) >= 2 {
+				continue
+			}
+			c = &clause{src: r.src, about: r.about}
+			index[k] = c
+			clauses = append(clauses, c)
+		}
+		dup := false
+		for _, x := range c.phrases {
+			dup = dup || x == phrase
+		}
+		if !dup && len(c.phrases) < 2 {
+			c.phrases = append(c.phrases, phrase)
+		}
+	}
+	var parts []string
+	for _, c := range clauses {
+		parts = append(parts, fmt.Sprintf("%s (%s) reports the %s %s", srcByID[c.src].CreatorName, srcByID[c.src].Type, byID[c.about].Name, strings.Join(c.phrases, " and ")))
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "I chose the %s at %s because it best fits what you asked for.", chosen.Name, catalog.FormatUSD(chosen.PriceCents))

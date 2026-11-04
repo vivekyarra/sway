@@ -11,17 +11,17 @@ import (
 	"testing"
 
 	"github.com/vivekyarra/sway/engine/internal/api"
-	"github.com/vivekyarra/sway/engine/internal/demo"
+	"github.com/vivekyarra/sway/engine/internal/history"
 	"github.com/vivekyarra/sway/engine/internal/testkit"
 )
 
 func server(t *testing.T, demoMode bool) (*httptest.Server, *testkit.Money) {
 	t.Helper()
 	m := testkit.New(t).WithMoney(t)
-	m.Cfg.DemoMode = demoMode
-	m.Pay.Cfg.DemoMode = demoMode
+	m.Cfg.TestTools = demoMode
+	m.Pay.Cfg.TestTools = demoMode
 	s := &api.Server{Cfg: m.Cfg, DB: m.DB, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Agent: m.Agent, Shop: m.Shop, Pay: m.Pay,
-		Demo: &demo.Builder{DB: m.DB, Cfg: m.Cfg, World: m.World, Pay: m.Pay}, Version: "test"}
+		History: &history.Builder{DB: m.DB, Cfg: m.Cfg, World: m.World, Pay: m.Pay}, Version: "test"}
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(ts.Close)
 	return ts, m
@@ -86,7 +86,23 @@ func TestHTTPFlowAndIdempotency(t *testing.T) {
 	if resp.StatusCode != 200 {
 		t.Fatal("overview failed")
 	}
-	resp, v := call(t, ts, "GET", "/api/ledger/verify", ``, nil)
+	var v map[string]any
+	resp, st := call(t, ts, "POST", "/api/merchant/settings", `{"commission_rate_bps":1000,"vesting_window_seconds":60}`, nil)
+	if resp.StatusCode != 200 || st["commission_rate_bps"].(float64) != 1000 {
+		t.Fatalf("settings %d %v", resp.StatusCode, st)
+	}
+	if resp, _ := call(t, ts, "POST", "/api/merchant/settings", `{"commission_rate_bps":9000}`, nil); resp.StatusCode != 422 {
+		t.Fatalf("out-of-range commission must be 422, got %d", resp.StatusCode)
+	}
+	_, d2 := call(t, ts, "POST", "/api/agent/decide", `{"request":"A standing desk that stays stable at full height for a tall person, under $450."}`, nil)
+	_, co := call(t, ts, "POST", "/api/paypal/orders", `{"decision_id":"`+d2["id"].(string)+`"}`, nil)
+	call(t, ts, "POST", "/api/paypal/orders/"+co["paypal_order_id"].(string)+"/capture", ``, nil)
+	m.Drain(t)
+	_, o3 := call(t, ts, "GET", "/api/orders/"+co["order_id"].(string), ``, nil)
+	if c := o3["split"].(map[string]any)["commission_cents"].(float64); c != 3990 { // 10% of $399
+		t.Fatalf("new orders must use the new 10%% rate, commission %v", c)
+	}
+	resp, v = call(t, ts, "GET", "/api/ledger/verify", ``, nil)
 	if resp.StatusCode != 200 || v["ok"] != true {
 		t.Fatalf("verify %v", v)
 	}
@@ -100,13 +116,13 @@ func TestHardening(t *testing.T) {
 			t.Fatalf("missing header %s", h)
 		}
 	}
-	// Demo-only routes do not exist in production mode (spec 10).
-	for _, p := range []string{"/api/demo/reset", "/api/demo/fast-forward", "/api/merchant/orders/x/simulate-dispute"} {
+	// Test-tool routes do not exist in production mode.
+	for _, p := range []string{"/api/admin/reset", "/api/admin/fast-forward", "/api/merchant/orders/x/test-dispute"} {
 		if resp, _ := call(t, ts, "POST", p, `{}`, nil); resp.StatusCode != 404 {
-			t.Fatalf("%s should 404 outside demo mode, got %d", p, resp.StatusCode)
+			t.Fatalf("%s should 404 without test tools, got %d", p, resp.StatusCode)
 		}
 	}
-	// The simulator never accepts external webhooks; forged events are rejected.
+	// Test mode never accepts external webhooks; forged events are rejected.
 	resp, _ = call(t, ts, "POST", "/api/webhooks/paypal", `{"id":"WH-1","event_type":"PAYMENT.CAPTURE.REFUNDED","resource":{}}`, nil)
 	if resp.StatusCode != 400 {
 		t.Fatalf("forged webhook must be rejected, got %d", resp.StatusCode)

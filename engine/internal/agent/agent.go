@@ -126,7 +126,7 @@ type Value struct {
 	Calls    int       `json:"calls"` // uncached engine calls made for this value
 }
 
-// Evaluate computes v(S) for the coalition of source ids against target (spec 6.3).
+// Evaluate computes v(S) for the coalition of source ids against target.
 func (a *Agent) Evaluate(ctx context.Context, in Input, coalition []string, target string, k int, onRun func(cached bool)) (Value, error) {
 	sub := in.WithSources(coalition)
 	results := make([]RunResult, k)
@@ -184,7 +184,7 @@ func (a *Agent) IsCached(ctx context.Context, in Input, coalition []string, k in
 	return n, err
 }
 
-// LeaveOneOut is the quick-influence estimate (spec 6.4).
+// LeaveOneOut is the quick-influence estimate.
 type LeaveOneOut struct {
 	VFull  float64            `json:"v_full"`
 	Deltas map[string]float64 `json:"deltas"`          // v(N) - v(N \ {i})

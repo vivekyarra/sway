@@ -1,8 +1,8 @@
 // Package config reads Sway's runtime configuration from the environment.
 //
 // Every value has a safe default so a fresh clone runs with zero setup:
-// no PayPal keys -> the PayPal simulator; no Anthropic key -> the deterministic
-// offline agent. The UI always shows which mode is live, so nothing is faked silently.
+// no PayPal keys -> PayPal test mode; no Anthropic key -> Sway's built-in
+// reasoning engine. The UI always shows which mode is live.
 package config
 
 import (
@@ -14,7 +14,7 @@ import (
 )
 
 type PayPal struct {
-	Mode          string // "sandbox" (real REST API) or "sim" (in-database simulator)
+	Mode          string // "sandbox" (PayPal REST API) or "test" (built-in PayPal test mode)
 	Env           string // "sandbox" or "live"
 	ClientID      string
 	ClientSecret  string
@@ -25,7 +25,7 @@ type PayPal struct {
 }
 
 type LLM struct {
-	Mode          string // "claude" or "sim"
+	Mode          string // "claude" or "local"
 	APIKey        string
 	BaseURL       string
 	DecisionModel string
@@ -48,8 +48,8 @@ type Config struct {
 	DatabaseURL       string
 	Addr              string
 	PublicBaseURL     string
-	DemoMode          bool
-	CatalogMode       string // "demo" or "live" (Channel3)
+	TestTools         bool
+	CatalogMode       string // "curated" or "live" (Channel3)
 	Channel3APIKey    string
 	Channel3BaseURL   string
 	VestingWindow     time.Duration
@@ -61,8 +61,9 @@ type Config struct {
 	VestingTick       time.Duration
 	AutoPayout        time.Duration // 0 disables automatic payout runs
 	TrustProxy        bool
-	RateLimitScale    int    // multiplies every rate limit (load tests and CI e2e); 1 in production
-	WebDir            string // optional override for UI assets (otherwise embedded)
+	RateLimitScale    int               // multiplies every rate limit (load tests and CI e2e); 1 in production
+	CreatorEmails     map[string]string // CREATOR_PAYPAL_EMAILS=c_priya=a@b,c_maya=c@d (sandbox payout receivers)
+	WebDir            string            // optional override for UI assets (otherwise embedded)
 	AllowedOrigins    []string
 	PayPal            PayPal
 	LLM               LLM
@@ -104,7 +105,7 @@ func Load() (Config, error) {
 	}
 
 	ppID, ppSecret := str("PAYPAL_CLIENT_ID", ""), str("PAYPAL_CLIENT_SECRET", "")
-	ppMode := "sim"
+	ppMode := "test"
 	if ppID != "" && ppSecret != "" {
 		ppMode = "sandbox"
 	}
@@ -116,19 +117,22 @@ func Load() (Config, error) {
 	}
 
 	key := str("ANTHROPIC_API_KEY", "")
-	llmMode := "sim"
+	llmMode := "local"
 	if key != "" {
 		llmMode = "claude"
 	}
 	llmMode = str("LLM_MODE", llmMode)
+	if llmMode == "sim" {
+		llmMode = "local" // earlier name
+	}
 
 	port := str("PORT", "8080")
 	c := Config{
 		DatabaseURL:       str("DATABASE_URL", "postgres://sway@localhost:5432/sway?sslmode=disable"),
 		Addr:              str("ADDR", ":"+port),
 		PublicBaseURL:     strings.TrimRight(str("PUBLIC_BASE_URL", "http://localhost:"+port), "/"),
-		DemoMode:          boolean("DEMO_MODE", true),
-		CatalogMode:       str("CATALOG_MODE", "demo"),
+		TestTools:         boolean("TEST_TOOLS", boolean("DEMO_MODE", true)),
+		CatalogMode:       str("CATALOG_MODE", "curated"),
 		Channel3APIKey:    str("CHANNEL3_API_KEY", ""),
 		Channel3BaseURL:   strings.TrimRight(str("CHANNEL3_BASE_URL", "https://api.trychannel3.com"), "/"),
 		VestingWindow:     time.Duration(num("VESTING_WINDOW_SECONDS", 120)) * time.Second,
@@ -141,6 +145,7 @@ func Load() (Config, error) {
 		AutoPayout:        time.Duration(num("AUTO_PAYOUT_SECONDS", 30)) * time.Second,
 		TrustProxy:        boolean("TRUST_PROXY", false),
 		RateLimitScale:    clamp(num("RATE_LIMIT_SCALE", 1), 1, 1000),
+		CreatorEmails:     pairs(str("CREATOR_PAYPAL_EMAILS", "")),
 		WebDir:            str("WEB_DIR", ""),
 		AllowedOrigins:    splitList(str("ALLOWED_ORIGINS", "http://localhost:3000")),
 		PayPal: PayPal{
@@ -165,14 +170,17 @@ func Load() (Config, error) {
 			MCPermutations: 40,
 		},
 	}
-	if c.PayPal.Mode != "sim" && c.PayPal.Mode != "sandbox" {
-		errs = append(errs, "PAYPAL_MODE must be sim or sandbox")
+	if c.PayPal.Mode == "sim" {
+		c.PayPal.Mode = "test" // earlier name
+	}
+	if c.PayPal.Mode != "test" && c.PayPal.Mode != "sandbox" {
+		errs = append(errs, "PAYPAL_MODE must be test or sandbox")
 	}
 	if c.PayPal.Mode == "sandbox" && (ppID == "" || ppSecret == "") {
 		errs = append(errs, "PAYPAL_MODE=sandbox needs PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET")
 	}
-	if c.LLM.Mode != "sim" && c.LLM.Mode != "claude" {
-		errs = append(errs, "LLM_MODE must be sim or claude")
+	if c.LLM.Mode != "local" && c.LLM.Mode != "claude" {
+		errs = append(errs, "LLM_MODE must be local or claude")
 	}
 	if c.LLM.Mode == "claude" && key == "" {
 		errs = append(errs, "LLM_MODE=claude needs ANTHROPIC_API_KEY")
@@ -194,6 +202,16 @@ func clamp(v, lo, hi int) int {
 		return hi
 	}
 	return v
+}
+
+func pairs(s string) map[string]string {
+	out := map[string]string{}
+	for _, p := range splitList(s) {
+		if k, v, ok := strings.Cut(p, "="); ok && strings.TrimSpace(k) != "" && strings.Contains(v, "@") {
+			out[strings.TrimSpace(k)] = strings.TrimSpace(v)
+		}
+	}
+	return out
 }
 
 func splitList(s string) []string {

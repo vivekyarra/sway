@@ -27,7 +27,7 @@ type Product struct {
 	Tagline    string             `json:"tagline"`
 	ImageURL   string             `json:"image_url"`
 	Specs      map[string]any     `json:"specs"`
-	Scores     map[string]float64 `json:"scores,omitempty"` // normalized spec-sheet fit per aspect (sim agent only)
+	Scores     map[string]float64 `json:"scores,omitempty"` // normalized spec-sheet fit per aspect (local engine only)
 	Source     string             `json:"source"`
 }
 
@@ -80,7 +80,7 @@ func ParseBudget(text string) int64 {
 	return n * 100
 }
 
-// CategoryDef comes from the seeded catalog definition.
+// CategoryDef comes from the historical catalog definition.
 type CategoryDef struct {
 	Label           string   `json:"label"`
 	Keywords        []string `json:"keywords"`

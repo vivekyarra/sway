@@ -45,12 +45,12 @@ export function StatusPill({ status, className = "" }: { status: string; classNa
   return <span className={`chip ${style} ${className}`}>{label}</span>;
 }
 
-export function Badge({ children, tone = "neutral", title }: { children: ReactNode; tone?: "neutral" | "accent" | "warn" | "sim" | "good"; title?: string }) {
+export function Badge({ children, tone = "neutral", title }: { children: ReactNode; tone?: "neutral" | "accent" | "warn" | "test" | "good"; title?: string }) {
   const tones = {
     neutral: "bg-paper-2 text-ink-2 border border-line",
     accent: "bg-accent-soft text-accent-ink",
     warn: "bg-pending-soft text-pending",
-    sim: "bg-[#fff1f6] text-[#b4235c] border border-[#f7c9da]",
+    test: "bg-vested-soft text-vested",
     good: "bg-paid-soft text-paid",
   };
   return (

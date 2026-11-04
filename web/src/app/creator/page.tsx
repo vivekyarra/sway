@@ -18,7 +18,7 @@ function CreatorView({ id }: { id: string }) {
   const [selected, setSelected] = useState<CreatorEvent | null>(null);
 
   useEffect(() => {
-    if (c && id === "c_priya" && (c.payouts ?? []).some((p) => p.mode !== "seeded" && !["FAILED", "RETURNED", "DENIED", "BLOCKED"].includes(p.status))) completeStep(6);
+    if (c && id === "c_priya" && (c.payouts ?? []).some((p) => p.mode !== "historical" && !["FAILED", "RETURNED", "DENIED", "BLOCKED"].includes(p.status))) completeStep(6);
   }, [c, id]);
 
   const cols = useMemo<ColDef<CreatorEvent>[]>(
@@ -44,7 +44,7 @@ function CreatorView({ id }: { id: string }) {
         colId: "origin",
         headerName: "Origin",
         maxWidth: 120,
-        valueGetter: (p) => (p.data?.seeded ? "seeded" : p.data?.simulated ? "simulator" : "sandbox"),
+        valueGetter: (p) => (p.data?.historical ? "history" : p.data?.test_mode ? "test mode" : "sandbox"),
       },
     ],
     [],
@@ -166,7 +166,7 @@ function CreatorView({ id }: { id: string }) {
                       {usd(p.amount_cents)} {p.offset_cents > 0 && <span className="text-xs font-normal text-forfeit">(after {usd(p.offset_cents)} clawback offset)</span>}
                     </div>
                     <div className="truncate font-mono text-[11px] text-muted">
-                      {p.mode === "seeded" ? "seeded history" : `PayPal batch ${p.paypal_payout_batch_id ?? "pending"} · item ${p.paypal_payout_item_id ?? "…"}`}
+                      {p.mode === "historical" ? "order history" : `PayPal batch ${p.paypal_payout_batch_id ?? "pending"} · item ${p.paypal_payout_item_id ?? "…"}`}
                     </div>
                   </div>
                   <span className="text-xs text-muted">{shortDate(p.created_at)}</span>

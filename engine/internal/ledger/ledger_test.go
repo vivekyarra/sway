@@ -17,7 +17,7 @@ func seed(t *testing.T, d *db.DB) {
 		`INSERT INTO merchants (id,name,commission_rate_bps,vesting_window_seconds) VALUES ('m1','Larkline Audio',800,120)`,
 		`INSERT INTO products (id,merchant_id,name,brand,category,price_cents) VALUES ('p1','m1','Halvo Q7','Halvo','headphones',22900)`,
 		`INSERT INTO creators (id,display_name,paypal_email) VALUES ('c1','Priya','priya@example.com'),('c2','Maya','maya@example.com')`,
-		`INSERT INTO orders (id,product_id,merchant_id,amount_cents,commission_rate_bps,sway_fee_bps,payment_mode,status) VALUES ('o1','p1','m1',22900,800,1500,'sim','CAPTURED')`,
+		`INSERT INTO orders (id,product_id,merchant_id,amount_cents,commission_rate_bps,sway_fee_bps,payment_mode,status) VALUES ('o1','p1','m1',22900,800,1500,'test','CAPTURED')`,
 	}
 	for _, s := range stmts {
 		if _, err := d.Pool.Exec(ctx, s); err != nil {
@@ -92,7 +92,7 @@ func TestAppendOnlyAndTamperDetection(t *testing.T) {
 	if _, err := d.Pool.Exec(ctx, `DELETE FROM ledger_entries`); err == nil {
 		t.Fatal("delete must be rejected")
 	}
-	// Simulate an attacker with superuser rights bypassing the trigger: Verify must notice.
+	// An attacker with superuser rights bypassing the trigger: Verify must notice.
 	err := d.Tx(ctx, func(q db.Q) error {
 		if _, err := q.Exec(ctx, `SET LOCAL sway.allow_reset = 'on'`); err != nil {
 			return err

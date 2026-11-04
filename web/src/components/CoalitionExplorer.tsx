@@ -89,7 +89,7 @@ export function CoalitionExplorer({ job, rows, productNames }: { job: Attributio
                 <div
                   key={r.source_id}
                   className="flex items-center justify-center truncate px-1"
-                  style={{ width: `${(r.phi / total) * 100}%`, background: `hsl(${252 - i * 38} 62% ${46 + i * 6}%)` }}
+                  style={{ width: `${(r.phi / total) * 100}%`, background: `hsl(${252 - i * 38} 62% ${38 - i * 3}%)` }}
                   title={`${r.creator_name}: ${pct(r.phi, 1)}`}
                 >
                   {r.creator_name.split(" ")[0]} {pct(r.phi / total)}

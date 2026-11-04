@@ -57,7 +57,7 @@ type AttributionJob struct {
 	FinishedAt    *time.Time      `json:"finished_at"`
 }
 
-// Order is the order page model (spec 4.3).
+// Order is the order page model.
 type Order struct {
 	ID              string              `json:"id"`
 	DecisionID      *string             `json:"decision_id"`
@@ -70,9 +70,9 @@ type Order struct {
 	RefundedCents   int64               `json:"refunded_cents"`
 	Status          string              `json:"status"`
 	DisputeStatus   string              `json:"dispute_status"`
-	DisputeSim      bool                `json:"dispute_simulated"`
+	DisputeTest     bool                `json:"dispute_test"`
 	PaymentMode     string              `json:"payment_mode"`
-	Seeded          bool                `json:"seeded"`
+	Historical      bool                `json:"historical"`
 	PayPalOrderID   *string             `json:"paypal_order_id"`
 	PayPalCaptureID *string             `json:"paypal_capture_id"`
 	BuyerEmail      string              `json:"buyer_email"`
@@ -91,7 +91,7 @@ type Refund struct {
 	PayPalRefundID string    `json:"paypal_refund_id"`
 	AmountCents    int64     `json:"amount_cents"`
 	Reason         string    `json:"reason"`
-	Simulated      bool      `json:"simulated"`
+	TestMode       bool      `json:"test_mode"`
 	CreatedAt      time.Time `json:"created_at"`
 }
 
@@ -120,10 +120,10 @@ func eventStatus(b ledger.Balances, accrued, forfeited, clawed int64) string {
 func GetOrder(ctx context.Context, q db.Q, id string) (Order, error) {
 	var o Order
 	err := q.QueryRow(ctx, `SELECT o.id, o.decision_id, o.product_id, p.name, p.brand, COALESCE(d.request_text,''), COALESCE(d.rationale,''), o.amount_cents, o.refunded_cents,
-		o.status, o.dispute_status, o.dispute_simulated, o.payment_mode, o.seeded, o.paypal_order_id, o.paypal_capture_id, o.buyer_email, o.captured_at, o.vests_at, o.vested_at, o.created_at
+		o.status, o.dispute_status, o.dispute_test, o.payment_mode, o.historical, o.paypal_order_id, o.paypal_capture_id, o.buyer_email, o.captured_at, o.vests_at, o.vested_at, o.created_at
 		FROM orders o JOIN products p ON p.id=o.product_id LEFT JOIN decisions d ON d.id=o.decision_id WHERE o.id=$1`, id).
 		Scan(&o.ID, &o.DecisionID, &o.ProductID, &o.ProductName, &o.ProductBrand, &o.Request, &o.Rationale, &o.AmountCents, &o.RefundedCents,
-			&o.Status, &o.DisputeStatus, &o.DisputeSim, &o.PaymentMode, &o.Seeded, &o.PayPalOrderID, &o.PayPalCaptureID, &o.BuyerEmail, &o.CapturedAt, &o.VestsAt, &o.VestedAt, &o.CreatedAt)
+			&o.Status, &o.DisputeStatus, &o.DisputeTest, &o.PaymentMode, &o.Historical, &o.PayPalOrderID, &o.PayPalCaptureID, &o.BuyerEmail, &o.CapturedAt, &o.VestsAt, &o.VestedAt, &o.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return o, ErrNotFound
 	}
@@ -145,13 +145,13 @@ func GetOrder(ctx context.Context, q db.Q, id string) (Order, error) {
 	if o.Split, err = ledger.SummarizeOrder(ctx, q, id); err != nil {
 		return o, err
 	}
-	rows, err := q.Query(ctx, `SELECT paypal_refund_id, amount_cents, reason, simulated, created_at FROM refunds WHERE order_id=$1 ORDER BY created_at`, id)
+	rows, err := q.Query(ctx, `SELECT paypal_refund_id, amount_cents, reason, test_mode, created_at FROM refunds WHERE order_id=$1 ORDER BY created_at`, id)
 	if err != nil {
 		return o, err
 	}
 	for rows.Next() {
 		var r Refund
-		if err := rows.Scan(&r.PayPalRefundID, &r.AmountCents, &r.Reason, &r.Simulated, &r.CreatedAt); err != nil {
+		if err := rows.Scan(&r.PayPalRefundID, &r.AmountCents, &r.Reason, &r.TestMode, &r.CreatedAt); err != nil {
 			rows.Close()
 			return o, err
 		}
@@ -240,7 +240,7 @@ func lostByCreator(ctx context.Context, q db.Q, orderID string) (map[string]lost
 // Entries lists ledger entries (newest first, capped).
 func Entries(ctx context.Context, q db.Q, where string, args ...any) ([]ledger.Entry, error) {
 	rows, err := q.Query(ctx, `SELECT seq, id, idem_key, type, COALESCE(order_id,''), COALESCE(creator_id,''), from_account, to_account, amount_cents, signed_cents,
-		ref, memo, simulated, prev_hash, hash, created_at FROM ledger_entries `+where+` ORDER BY seq DESC LIMIT 1000`, args...)
+		ref, memo, test_mode, prev_hash, hash, created_at FROM ledger_entries `+where+` ORDER BY seq DESC LIMIT 1000`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -248,7 +248,7 @@ func Entries(ctx context.Context, q db.Q, where string, args ...any) ([]ledger.E
 	var out []ledger.Entry
 	for rows.Next() {
 		var e ledger.Entry
-		if err := rows.Scan(&e.Seq, &e.ID, &e.IdemKey, &e.Type, &e.OrderID, &e.CreatorID, &e.From, &e.To, &e.Amount, &e.Signed, &e.Ref, &e.Memo, &e.Simulated, &e.PrevHash, &e.Hash, &e.CreatedAt); err != nil {
+		if err := rows.Scan(&e.Seq, &e.ID, &e.IdemKey, &e.Type, &e.OrderID, &e.CreatorID, &e.From, &e.To, &e.Amount, &e.Signed, &e.Ref, &e.Memo, &e.TestMode, &e.PrevHash, &e.Hash, &e.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, e)
@@ -256,7 +256,7 @@ func Entries(ctx context.Context, q db.Q, where string, args ...any) ([]ledger.E
 	return out, rows.Err()
 }
 
-// Creator dashboard (spec 4.4).
+// Creator dashboard.
 type Creator struct {
 	ID          string                   `json:"id"`
 	DisplayName string                   `json:"display_name"`
@@ -285,8 +285,8 @@ type CreatorEvent struct {
 	Status      string    `json:"status"`
 	Reason      string    `json:"reason"`
 	Explanation *string   `json:"explanation"`
-	Seeded      bool      `json:"seeded"`
-	Simulated   bool      `json:"simulated"`
+	Historical  bool      `json:"historical"`
+	TestMode    bool      `json:"test_mode"`
 }
 
 type CreatorSource struct {
@@ -332,7 +332,7 @@ func GetCreator(ctx context.Context, q db.Q, id string) (Creator, error) {
 	if c.Balances, err = payments.Balances(ctx, q, id); err != nil {
 		return c, err
 	}
-	rows, err := q.Query(ctx, `SELECT a.order_id, COALESCE(o.captured_at, o.created_at), p.name, a.source_id, s.title, a.phi, a.phi_stddev, a.weight, a.amount_cents, a.role, a.explanation, o.seeded, o.payment_mode
+	rows, err := q.Query(ctx, `SELECT a.order_id, COALESCE(o.captured_at, o.created_at), p.name, a.source_id, s.title, a.phi, a.phi_stddev, a.weight, a.amount_cents, a.role, a.explanation, o.historical, o.payment_mode
 		FROM attributions a JOIN orders o ON o.id=a.order_id JOIN products p ON p.id=o.product_id JOIN sources s ON s.id=a.source_id
 		WHERE a.creator_id=$1 ORDER BY COALESCE(o.captured_at, o.created_at) DESC, a.source_id`, id)
 	if err != nil {
@@ -343,11 +343,11 @@ func GetCreator(ctx context.Context, q db.Q, id string) (Creator, error) {
 	for rows.Next() {
 		var e CreatorEvent
 		var role, mode string
-		if err := rows.Scan(&e.OrderID, &e.Date, &e.ProductName, &e.SourceID, &e.SourceTitle, &e.Phi, &e.PhiStd, &e.Share, &e.AmountCents, &role, &e.Explanation, &e.Seeded, &mode); err != nil {
+		if err := rows.Scan(&e.OrderID, &e.Date, &e.ProductName, &e.SourceID, &e.SourceTitle, &e.Phi, &e.PhiStd, &e.Share, &e.AmountCents, &role, &e.Explanation, &e.Historical, &mode); err != nil {
 			rows.Close()
 			return c, err
 		}
-		e.Simulated = mode != "sandbox"
+		e.TestMode = mode != "sandbox"
 		e.Share = round2(e.Share * 100)
 		r := AttributionRow{Role: role, AmountCents: e.AmountCents, Phi: e.Phi}
 		e.Reason = reasonFor(&r)
@@ -466,7 +466,7 @@ func ListCreators(ctx context.Context, q db.Q) ([]CreatorSummary, error) {
 	return out, rows.Err()
 }
 
-// Merchant overview (spec 4.5).
+// Merchant overview.
 type Merchant struct {
 	ID                string              `json:"id"`
 	Name              string              `json:"name"`
@@ -521,7 +521,7 @@ type OrderRow struct {
 	RefundedCents     int64      `json:"refunded_cents"`
 	Status            string     `json:"status"`
 	DisputeStatus     string     `json:"dispute_status"`
-	DisputeSimulated  bool       `json:"dispute_simulated"`
+	DisputeTest       bool       `json:"dispute_test"`
 	AttributionStatus string     `json:"attribution_status"`
 	Share             *float64   `json:"share"`
 	CreatorPoolCents  int64      `json:"creator_pool_cents"`
@@ -530,7 +530,7 @@ type OrderRow struct {
 	CommissionCents   int64      `json:"commission_cents"`
 	Balanced          bool       `json:"balanced"`
 	PaymentMode       string     `json:"payment_mode"`
-	Seeded            bool       `json:"seeded"`
+	Historical        bool       `json:"historical"`
 	PayPalCaptureID   *string    `json:"paypal_capture_id"`
 	CapturedAt        *time.Time `json:"captured_at"`
 	VestsAt           *time.Time `json:"vests_at"`
@@ -553,7 +553,7 @@ type Webhook struct {
 	EventType  string     `json:"event_type"`
 	ResourceID string     `json:"resource_id"`
 	Verified   bool       `json:"verified"`
-	Simulated  bool       `json:"simulated"`
+	TestMode   bool       `json:"test_mode"`
 	ReceivedAt time.Time  `json:"received_at"`
 	Processed  *time.Time `json:"processed_at"`
 	Outcome    string     `json:"outcome"`
@@ -632,13 +632,13 @@ func GetMerchant(ctx context.Context, q db.Q, swayFeeBps int) (Merchant, error) 
 	if m.Ledger, err = Entries(ctx, q, ""); err != nil {
 		return m, err
 	}
-	wrows, err := q.Query(ctx, `SELECT paypal_event_id, event_type, resource_id, verified, simulated, received_at, processed_at, outcome FROM webhook_events ORDER BY received_at DESC LIMIT 200`)
+	wrows, err := q.Query(ctx, `SELECT paypal_event_id, event_type, resource_id, verified, test_mode, received_at, processed_at, outcome FROM webhook_events ORDER BY received_at DESC LIMIT 200`)
 	if err != nil {
 		return m, err
 	}
 	for wrows.Next() {
 		var w Webhook
-		if err := wrows.Scan(&w.EventID, &w.EventType, &w.ResourceID, &w.Verified, &w.Simulated, &w.ReceivedAt, &w.Processed, &w.Outcome); err != nil {
+		if err := wrows.Scan(&w.EventID, &w.EventType, &w.ResourceID, &w.Verified, &w.TestMode, &w.ReceivedAt, &w.Processed, &w.Outcome); err != nil {
 			wrows.Close()
 			return m, err
 		}
@@ -722,8 +722,8 @@ func content(ctx context.Context, q db.Q) ([]ContentRow, error) {
 }
 
 func orderRows(ctx context.Context, q db.Q) ([]OrderRow, error) {
-	rows, err := q.Query(ctx, `SELECT o.id, p.name, o.amount_cents, o.refunded_cents, o.status, o.dispute_status, o.dispute_simulated, COALESCE(a.status,'—'), a.share,
-		o.payment_mode, o.seeded, o.paypal_capture_id, o.captured_at, o.vests_at, o.vested_at
+	rows, err := q.Query(ctx, `SELECT o.id, p.name, o.amount_cents, o.refunded_cents, o.status, o.dispute_status, o.dispute_test, COALESCE(a.status,'—'), a.share,
+		o.payment_mode, o.historical, o.paypal_capture_id, o.captured_at, o.vests_at, o.vested_at
 		FROM orders o JOIN products p ON p.id=o.product_id LEFT JOIN attribution_jobs a ON a.order_id=o.id
 		WHERE o.captured_at IS NOT NULL ORDER BY o.captured_at DESC LIMIT 500`)
 	if err != nil {
@@ -732,8 +732,8 @@ func orderRows(ctx context.Context, q db.Q) ([]OrderRow, error) {
 	var out []OrderRow
 	for rows.Next() {
 		var r OrderRow
-		if err := rows.Scan(&r.ID, &r.ProductName, &r.AmountCents, &r.RefundedCents, &r.Status, &r.DisputeStatus, &r.DisputeSimulated, &r.AttributionStatus, &r.Share,
-			&r.PaymentMode, &r.Seeded, &r.PayPalCaptureID, &r.CapturedAt, &r.VestsAt, &r.VestedAt); err != nil {
+		if err := rows.Scan(&r.ID, &r.ProductName, &r.AmountCents, &r.RefundedCents, &r.Status, &r.DisputeStatus, &r.DisputeTest, &r.AttributionStatus, &r.Share,
+			&r.PaymentMode, &r.Historical, &r.PayPalCaptureID, &r.CapturedAt, &r.VestsAt, &r.VestedAt); err != nil {
 			rows.Close()
 			return nil, err
 		}

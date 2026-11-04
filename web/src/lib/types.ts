@@ -76,7 +76,7 @@ export type LedgerEntry = {
   signed_cents: number;
   ref?: string;
   memo?: string;
-  simulated: boolean;
+  test_mode: boolean;
   prev_hash: string;
   hash: string;
   created_at: string;
@@ -159,9 +159,9 @@ export type Order = {
   refunded_cents: number;
   status: string;
   dispute_status: string;
-  dispute_simulated: boolean;
-  payment_mode: "sandbox" | "sim" | "seeded";
-  seeded: boolean;
+  dispute_test: boolean;
+  payment_mode: "sandbox" | "test" | "historical";
+  historical: boolean;
   paypal_order_id: string | null;
   paypal_capture_id: string | null;
   captured_at: string | null;
@@ -170,7 +170,7 @@ export type Order = {
   attribution: AttributionJob | null;
   attributions: AttributionRow[] | null;
   split: Split;
-  refunds: { paypal_refund_id: string; amount_cents: number; reason: string; simulated: boolean; created_at: string }[] | null;
+  refunds: { paypal_refund_id: string; amount_cents: number; reason: string; test_mode: boolean; created_at: string }[] | null;
   ledger: LedgerEntry[] | null;
 };
 
@@ -214,8 +214,8 @@ export type CreatorEvent = {
   status: string;
   reason: string;
   explanation: string | null;
-  seeded: boolean;
-  simulated: boolean;
+  historical: boolean;
+  test_mode: boolean;
 };
 
 export type Creator = {
@@ -296,7 +296,7 @@ export type Merchant = {
     refunded_cents: number;
     status: string;
     dispute_status: string;
-    dispute_simulated: boolean;
+    dispute_test: boolean;
     attribution_status: string;
     share: number | null;
     creator_pool_cents: number;
@@ -305,7 +305,7 @@ export type Merchant = {
     commission_cents: number;
     balanced: boolean;
     payment_mode: string;
-    seeded: boolean;
+    historical: boolean;
     paypal_capture_id: string | null;
     captured_at: string | null;
     vests_at: string | null;
@@ -328,7 +328,7 @@ export type Merchant = {
     event_type: string;
     resource_id: string;
     verified: boolean;
-    simulated: boolean;
+    test_mode: boolean;
     received_at: string;
     processed_at: string | null;
     outcome: string;
@@ -339,10 +339,10 @@ export type Merchant = {
 
 export type AppConfig = {
   version: string;
-  demo_mode: boolean;
+  test_tools: boolean;
   catalog_mode: string;
-  paypal: { mode: "sandbox" | "sim"; client_id?: string; buyer_email?: string; buyer_password?: string };
-  llm: { mode: "claude" | "sim"; model: string; prompt_version: string };
+  paypal: { mode: "sandbox" | "test"; client_id?: string; buyer_email?: string; buyer_password?: string };
+  llm: { mode: "claude" | "local"; model: string; prompt_version: string };
   vesting_window_seconds: number;
   commission_rate_bps: number;
   sway_fee_bps: number;

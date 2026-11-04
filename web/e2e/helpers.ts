@@ -9,7 +9,7 @@ export async function ask(page: Page, request?: string) {
   await expect(page.getByText("Why I chose this")).toBeVisible();
 }
 
-/** Buys the agent's pick through the checkout UI (simulator or sandbox buttons) and lands on the order page. */
+/** Buys the agent's pick through the checkout UI (test mode or Sandbox buttons) and lands on the order page. */
 export async function buy(page: Page) {
   await page.getByRole("button", { name: /Buy with PayPal/ }).click();
   await page.getByRole("button", { name: /^Pay \$/ }).click();

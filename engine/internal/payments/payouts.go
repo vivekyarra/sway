@@ -29,9 +29,9 @@ type chunk struct {
 }
 
 // RunPayouts batches every creator whose vested balance, net of any owed clawbacks, reaches the minimum payout
-// (spec 5.3 step 8). The ledger entries and batch rows commit first; submitting to PayPal is a queued job
+// . The ledger entries and batch rows commit first; submitting to PayPal is a queued job
 // (transactional outbox), so a crash can never send money that the books don't show.
-// mode "seeded" books a batch without calling PayPal (seeded history only).
+// mode "historical" books a batch without calling PayPal (order history only).
 func (s *Service) RunPayouts(ctx context.Context, mode string) (PayoutPlan, error) {
 	if mode == "" {
 		mode = s.PP.Mode()
@@ -111,7 +111,7 @@ func (s *Service) RunPayouts(ctx context.Context, mode string) (PayoutPlan, erro
 		if _, err := q.Exec(ctx, `INSERT INTO payout_batches (id, sender_batch_id, status, mode) VALUES ($1,$2,'CREATED',$3)`, batchID, "sway_"+batchID, mode); err != nil {
 			return err
 		}
-		simulated := mode != "sandbox"
+		testMode := mode != "sandbox"
 		var entries []ledger.Entry
 		sort.Strings(creators)
 		for _, c := range creators {
@@ -137,20 +137,20 @@ func (s *Service) RunPayouts(ctx context.Context, mode string) (PayoutPlan, erro
 				if remainingOffset > 0 {
 					o := min(remainingOffset, amt)
 					entries = append(entries, ledger.Entry{Type: ledger.ClawbackOffset, OrderID: ch.orderID, CreatorID: c, From: ledger.CreatorVested, To: ledger.CreatorOwed,
-						Amount: o, IdemKey: ledger.Key("offset", itemID, ch.orderID), Ref: itemID, Memo: "owed clawback netted against this payout", Simulated: simulated})
+						Amount: o, IdemKey: ledger.Key("offset", itemID, ch.orderID), Ref: itemID, Memo: "owed clawback netted against this payout", TestMode: testMode})
 					remainingOffset -= o
 					amt -= o
 				}
 				if amt > 0 && sendable {
 					entries = append(entries, ledger.Entry{Type: ledger.PayoutSent, OrderID: ch.orderID, CreatorID: c, From: ledger.CreatorVested, To: ledger.CreatorPaid,
-						Amount: amt, IdemKey: ledger.Key("payout", itemID, ch.orderID), Ref: itemID, Memo: "paid via PayPal Payouts", Simulated: simulated})
+						Amount: amt, IdemKey: ledger.Key("payout", itemID, ch.orderID), Ref: itemID, Memo: "paid via PayPal Payouts", TestMode: testMode})
 					orders++
 				}
 			}
 			plan.Offsets += offset
 			if sendable {
 				status := "CREATED"
-				if mode == "seeded" {
+				if mode == "historical" {
 					status = "SUCCESS"
 				}
 				if _, err := q.Exec(ctx, `INSERT INTO payout_items (id, batch_id, creator_id, receiver, amount_cents, offset_cents, status) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
@@ -171,13 +171,13 @@ func (s *Service) RunPayouts(ctx context.Context, mode string) (PayoutPlan, erro
 			return nil
 		}
 		status := "QUEUED"
-		if mode == "seeded" {
+		if mode == "historical" {
 			status = "SUCCESS"
 		}
 		if _, err := q.Exec(ctx, `UPDATE payout_batches SET status=$2, total_cents=$3 WHERE id=$1`, batchID, status, plan.TotalCents); err != nil {
 			return err
 		}
-		if mode == "seeded" {
+		if mode == "historical" {
 			return nil
 		}
 		return jobs.Enqueue(ctx, q, jobs.TypePayoutSubmit, map[string]string{"batch_id": batchID}, "submit:"+batchID, 0)
@@ -188,7 +188,7 @@ func (s *Service) RunPayouts(ctx context.Context, mode string) (PayoutPlan, erro
 	return plan, err
 }
 
-// SubmitPayoutBatch sends a queued batch to PayPal Payouts (spec 8.4).
+// SubmitPayoutBatch sends a queued batch to PayPal Payouts.
 func (s *Service) SubmitPayoutBatch(ctx context.Context, batchID string) error {
 	var senderBatchID, status string
 	if err := s.DB.Pool.QueryRow(ctx, `SELECT sender_batch_id, status FROM payout_batches WHERE id=$1`, batchID).Scan(&senderBatchID, &status); err != nil {
@@ -295,20 +295,20 @@ func itemIDs(ctx context.Context, q db.Q, batchID string) ([]string, error) {
 // reverseItem returns a failed/returned item's money from paid back to vested, order by order, then reconciles
 // those orders (a refund that arrived while the money was out can now be forfeited instead of clawed back).
 func (s *Service) reverseItem(ctx context.Context, q db.Q, itemID string) error {
-	rows, err := q.Query(ctx, `SELECT order_id, creator_id, amount_cents, simulated FROM ledger_entries WHERE ref=$1 AND type=$2`, itemID, ledger.PayoutSent)
+	rows, err := q.Query(ctx, `SELECT order_id, creator_id, amount_cents, test_mode FROM ledger_entries WHERE ref=$1 AND type=$2`, itemID, ledger.PayoutSent)
 	if err != nil {
 		return err
 	}
 	type sent struct {
 		order, creator string
 		amt            int64
-		sim            bool
+		test           bool
 	}
 	var ss []sent
 	var orders []string
 	for rows.Next() {
 		var x sent
-		if err := rows.Scan(&x.order, &x.creator, &x.amt, &x.sim); err != nil {
+		if err := rows.Scan(&x.order, &x.creator, &x.amt, &x.test); err != nil {
 			rows.Close()
 			return err
 		}
@@ -322,7 +322,7 @@ func (s *Service) reverseItem(ctx context.Context, q db.Q, itemID string) error 
 	var entries []ledger.Entry
 	for _, x := range ss {
 		entries = append(entries, ledger.Entry{Type: ledger.PayoutFailedReversal, OrderID: x.order, CreatorID: x.creator, From: ledger.CreatorPaid, To: ledger.CreatorVested,
-			Amount: x.amt, IdemKey: ledger.Key("reversal", itemID, x.order), Ref: itemID, Memo: "payout failed or returned: back to vested", Simulated: x.sim})
+			Amount: x.amt, IdemKey: ledger.Key("reversal", itemID, x.order), Ref: itemID, Memo: "payout failed or returned: back to vested", TestMode: x.test})
 	}
 	if _, err := ledger.Post(ctx, q, entries...); err != nil {
 		return err
@@ -335,7 +335,7 @@ func (s *Service) reverseItem(ctx context.Context, q db.Q, itemID string) error 
 	return nil
 }
 
-// PollPayoutBatch refreshes a batch from PayPal (spec 8.4). It asks to be retried while items are in flight.
+// PollPayoutBatch refreshes a batch from PayPal. It asks to be retried while items are in flight.
 func (s *Service) PollPayoutBatch(ctx context.Context, batchID string) error {
 	var ppBatch *string
 	if err := s.DB.Pool.QueryRow(ctx, `SELECT paypal_payout_batch_id FROM payout_batches WHERE id=$1`, batchID).Scan(&ppBatch); err != nil {
@@ -386,7 +386,7 @@ func (s *Service) PollPayoutBatch(ctx context.Context, batchID string) error {
 	return nil
 }
 
-// CancelPayoutItem cancels an UNCLAIMED item so a refunded order's money comes back (spec 7.4).
+// CancelPayoutItem cancels an UNCLAIMED item so a refunded order's money comes back.
 func (s *Service) CancelPayoutItem(ctx context.Context, itemID string) error {
 	var ppItem *string
 	var status string

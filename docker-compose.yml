@@ -1,5 +1,5 @@
 # One command, no keys needed:  docker compose up --build   then open http://localhost:8080
-# Add PayPal sandbox and Anthropic keys in a .env file (see .env.example) to switch from simulators to the real APIs.
+# Add PayPal Sandbox and Anthropic keys in a .env file (see .env.example) to use PayPal Sandbox and Claude.
 services:
   db:
     image: postgres:16-alpine

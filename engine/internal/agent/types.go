@@ -20,7 +20,7 @@ import (
 // PromptVersion is bumped whenever SystemPrompt or the message layout changes; it is part of the cache key.
 const PromptVersion = "DECISION_PROMPT_V1"
 
-// SystemPrompt is the fixed decision prompt (spec 6.2).
+// SystemPrompt is the fixed decision prompt.
 const SystemPrompt = `You are a neutral shopping agent. You earn nothing from any choice.
 Decide which candidate product best fits the shopper's request.
 Use ONLY the product data and the sources provided. Sources are
@@ -52,7 +52,7 @@ type Output struct {
 	ReliedOn  []string `json:"relied_on_source_ids"`
 }
 
-// Engine makes one decision. Implementations: Claude (live) and Sim (deterministic, offline).
+// Engine makes one decision. Implementations: Claude and Local (Sway's built-in deterministic engine).
 type Engine interface {
 	Name() string
 	Model() string
@@ -95,7 +95,7 @@ func (in Input) SourceIDs() []string {
 	return ids
 }
 
-// UserMessage renders the decision request (spec 6.2): request, candidates by id, sources by id.
+// UserMessage renders the decision request: request, candidates by id, sources by id.
 func UserMessage(in Input) string {
 	in = in.Normalize()
 	var b strings.Builder
@@ -174,7 +174,7 @@ func Validate(in Input, out *Output) error {
 	return nil
 }
 
-// Probabilities converts scores to choice probabilities with a softmax at temperature tau (spec 6.3).
+// Probabilities converts scores to choice probabilities with a softmax at temperature tau.
 func Probabilities(scores []Score, tau float64) map[string]float64 {
 	out := make(map[string]float64, len(scores))
 	if len(scores) == 0 {

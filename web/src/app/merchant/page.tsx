@@ -52,6 +52,63 @@ function Trend({ m }: { m: Merchant }) {
   );
 }
 
+function Settings({ m, onSaved }: { m: Merchant; onSaved: (msg: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [rate, setRate] = useState(String(m.commission_rate_bps / 100));
+  const [vest, setVest] = useState(String(m.vesting_window_seconds));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  if (!open)
+    return (
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+        <Badge>Commission {(m.commission_rate_bps / 100).toFixed(1).replace(/\.0$/, "")}% of order</Badge>
+        <Badge>Vesting window {dur(m.vesting_window_seconds)}</Badge>
+        <Badge title="Read-only: Sway's cut of the creator pool">Sway fee {(m.sway_fee_bps / 100).toFixed(0)}% of creator pool</Badge>
+        <button className="link text-xs" onClick={() => setOpen(true)}>
+          Edit settings
+        </button>
+      </div>
+    );
+  return (
+    <form
+      className="card mt-3 flex flex-wrap items-end gap-3 p-3 text-sm"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setBusy(true);
+        setErr(null);
+        try {
+          await api.post("/merchant/settings", { commission_rate_bps: Math.round(Number(rate) * 100), vesting_window_seconds: Math.round(Number(vest)) });
+          setOpen(false);
+          onSaved("Settings saved. New purchases use the new terms; existing orders keep theirs.");
+        } catch (e2) {
+          setErr((e2 as Error).message);
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <label className="flex flex-col gap-1">
+        <span className="text-xs text-muted">Commission (% of order)</span>
+        <input type="number" min={0} max={30} step={0.5} value={rate} onChange={(e) => setRate(e.target.value)} className="w-28 rounded-lg bg-paper px-3 py-1.5 ring-1 ring-line focus:outline-none focus:ring-2 focus:ring-accent" />
+      </label>
+      <label className="flex flex-col gap-1">
+        <span className="text-xs text-muted">Vesting window (seconds)</span>
+        <input type="number" min={10} step={1} value={vest} onChange={(e) => setVest(e.target.value)} className="w-36 rounded-lg bg-paper px-3 py-1.5 ring-1 ring-line focus:outline-none focus:ring-2 focus:ring-accent" />
+      </label>
+      <span className="text-xs text-muted">Sway fee {(m.sway_fee_bps / 100).toFixed(0)}% of creator pool (read-only)</span>
+      <div className="ml-auto flex gap-2">
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(false)}>
+          Cancel
+        </button>
+        <button type="submit" className="btn btn-primary btn-sm" disabled={busy}>
+          {busy ? <Spinner /> : null} Save
+        </button>
+      </div>
+      {err && <div className="w-full text-xs text-forfeit">{err}</div>}
+    </form>
+  );
+}
+
 function OrderActions({ row, onDone }: { row: OrderRow; onDone: (msg: string) => void }) {
   const cfg = useConfig();
   const [busy, setBusy] = useState(false);
@@ -79,18 +136,18 @@ function OrderActions({ row, onDone }: { row: OrderRow; onDone: (msg: string) =>
       >
         Refund
       </button>
-      {cfg?.demo_mode && (
+      {cfg?.test_tools && (
         <select
-          aria-label="Simulate dispute"
+          aria-label="Test a dispute"
           className="rounded-full border border-line-2 bg-card px-2 py-1 text-xs"
           disabled={busy || row.status === "REFUNDED"}
           value=""
           onChange={(e) => {
             const action = e.target.value;
-            if (action) act(() => api.post(`/merchant/orders/${row.id}/simulate-dispute`, { action }), `Simulated dispute: ${action.replace("_", " ")}.`);
+            if (action) act(() => api.post(`/merchant/orders/${row.id}/test-dispute`, { action }), `Test dispute: ${action.replace("_", " ")}.`);
           }}
         >
-          <option value="">Simulate dispute…</option>
+          <option value="">Test a dispute…</option>
           {row.dispute_status !== "OPEN" && <option value="open">Open dispute</option>}
           {row.dispute_status === "OPEN" && <option value="resolve_seller">Resolve for seller</option>}
           {row.dispute_status === "OPEN" && <option value="resolve_buyer">Resolve for buyer</option>}
@@ -146,7 +203,7 @@ function MerchantView() {
         minWidth: 150,
         cellRenderer: (p: ICellRendererParams<OrderRow>) =>
           p.value === "NONE" ? <span className="text-muted">—</span> : (
-            <span className="flex items-center gap-1"><StatusPill status={p.value === "OPEN" ? "OPEN" : p.value} />{p.data?.dispute_simulated && <Badge tone="sim">sim</Badge>}</span>
+            <span className="flex items-center gap-1"><StatusPill status={p.value === "OPEN" ? "OPEN" : p.value} />{p.data?.dispute_test && <Badge tone="test">test</Badge>}</span>
           ),
       },
       { field: "attribution_status", headerName: "Attribution", cellRenderer: (p: ICellRendererParams<OrderRow>) => <StatusPill status={p.value} />, maxWidth: 130 },
@@ -159,7 +216,7 @@ function MerchantView() {
         field: "payment_mode",
         headerName: "Origin",
         maxWidth: 110,
-        valueFormatter: (p) => (p.data?.seeded ? "seeded" : p.value === "sim" ? "simulator" : "sandbox"),
+        valueFormatter: (p) => (p.data?.historical ? "history" : p.value === "test" ? "test mode" : "sandbox"),
       },
       { headerName: "Actions", minWidth: 270, sortable: false, filter: false, cellRenderer: (p: ICellRendererParams<OrderRow>) => p.data && <OrderActions row={p.data} onDone={note} /> },
     ],
@@ -191,8 +248,8 @@ function MerchantView() {
       { field: "amount_cents", headerName: "Amount", valueFormatter: (p) => usd(p.value), maxWidth: 110, cellClass: "tabular" },
       { field: "offset_cents", headerName: "Clawback offset", valueFormatter: (p) => (p.value ? usd(p.value) : "—"), maxWidth: 140, cellClass: "tabular" },
       { field: "status", headerName: "Status", cellRenderer: (p: ICellRendererParams<PayoutItem>) => <StatusPill status={p.value} />, maxWidth: 130 },
-      { field: "paypal_payout_batch_id", headerName: "PayPal batch", valueFormatter: (p) => (p.data?.mode === "seeded" ? "seeded history" : p.value ?? "submitting…"), minWidth: 170, cellClass: "font-mono text-xs" },
-      { field: "paypal_payout_item_id", headerName: "PayPal item", valueFormatter: (p) => (p.data?.mode === "seeded" ? "—" : p.value ?? "…"), minWidth: 170, cellClass: "font-mono text-xs" },
+      { field: "paypal_payout_batch_id", headerName: "PayPal batch", valueFormatter: (p) => (p.data?.mode === "historical" ? "order history" : p.value ?? "submitting…"), minWidth: 170, cellClass: "font-mono text-xs" },
+      { field: "paypal_payout_item_id", headerName: "PayPal item", valueFormatter: (p) => (p.data?.mode === "historical" ? "—" : p.value ?? "…"), minWidth: 170, cellClass: "font-mono text-xs" },
     ],
     [],
   );
@@ -221,7 +278,7 @@ function MerchantView() {
         field: "verified",
         headerName: "Signature",
         maxWidth: 140,
-        cellRenderer: (p: ICellRendererParams<Webhook>) => (p.data?.simulated ? <Badge tone="sim">SIMULATED</Badge> : p.value ? <Badge tone="good">verified</Badge> : <Badge tone="warn">unverified</Badge>),
+        cellRenderer: (p: ICellRendererParams<Webhook>) => (p.data?.test_mode ? <Badge tone="test">test event</Badge> : p.value ? <Badge tone="good">verified</Badge> : <Badge tone="warn">unverified</Badge>),
       },
       { field: "outcome", headerName: "Outcome", minWidth: 200 },
       { field: "processed_at", headerName: "Processed", valueFormatter: (p) => (p.value ? ago(p.value) : "queued"), maxWidth: 120 },
@@ -251,15 +308,11 @@ function MerchantView() {
         <div>
           <div className="eyebrow">Merchant</div>
           <h1 className="display mt-1 text-4xl">{m.name}</h1>
-          <div className="mt-2 flex flex-wrap gap-2 text-sm">
-            <Badge>Commission {(m.commission_rate_bps / 100).toFixed(0)}% of order</Badge>
-            <Badge>Vesting window {dur(m.vesting_window_seconds)}</Badge>
-            <Badge title="Read-only: Sway's cut of the creator pool">Sway fee {(m.sway_fee_bps / 100).toFixed(0)}% of creator pool</Badge>
-          </div>
+          <Settings m={m} onSaved={note} />
         </div>
         <div className="flex flex-wrap gap-2">
-          {cfg?.demo_mode && (
-            <button className="btn btn-ghost" disabled={!!busy} onClick={() => action("ff", "/demo/fast-forward", (r) => `Fast-forwarded vesting: ${r.vested ?? 0} order(s) vested. Payouts follow automatically.`)}>
+          {cfg?.test_tools && (
+            <button className="btn btn-ghost" disabled={!!busy} onClick={() => action("ff", "/admin/fast-forward", (r) => `Fast-forwarded vesting: ${r.vested ?? 0} order(s) vested. Payouts follow automatically.`)}>
               {busy === "ff" ? <Spinner /> : "⏩"} Fast-forward vesting
             </button>
           )}
@@ -336,7 +389,7 @@ function MerchantView() {
             <div className="mb-3 flex flex-wrap gap-2 text-xs">
               {(m.batches ?? []).slice(0, 6).map((b) => (
                 <span key={b.id} className="chip border border-line bg-paper py-1 text-ink-2">
-                  {b.mode === "seeded" ? "seeded" : b.paypal_payout_batch_id ?? b.sender_batch_id} · {usd(b.total_cents)} · <StatusPill status={b.status} />
+                  {b.mode === "historical" ? "order history" : b.paypal_payout_batch_id ?? b.sender_batch_id} · {usd(b.total_cents)} · <StatusPill status={b.status} />
                 </span>
               ))}
             </div>

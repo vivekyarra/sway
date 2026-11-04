@@ -8,8 +8,8 @@ import (
 	"github.com/vivekyarra/sway/engine/internal/seed"
 )
 
-// Spec 13.1 #4: DealBot is flagged, Copycat is a duplicate of Priya, Priya is not flagged.
-func TestSeededScreening(t *testing.T) {
+// DealBot is flagged, Copycat is a duplicate of Priya, Priya is not flagged.
+func TestCuratedScreening(t *testing.T) {
 	w, err := seed.Load()
 	if err != nil {
 		t.Fatal(err)

@@ -182,9 +182,9 @@ func main() {
 		}
 		time.Sleep(time.Second)
 	}
-	call(b, st, "fast_forward", "POST", "/api/demo/fast-forward", map[string]any{}, nil)
+	call(b, st, "fast_forward", "POST", "/api/admin/fast-forward", map[string]any{}, nil)
 	call(b, st, "payouts", "POST", "/api/merchant/payouts/run", map[string]any{}, nil)
-	time.Sleep(6 * time.Second) // let simulated payouts settle and be polled
+	time.Sleep(6 * time.Second) // let testMode payouts settle and be polled
 	call(b, st, "overview", "GET", "/api/merchant/overview", nil, &ov)
 
 	n := 0

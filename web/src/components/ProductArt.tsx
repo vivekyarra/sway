@@ -1,4 +1,4 @@
-// Procedural product illustrations: the demo brands are invented, so there are no photos to use.
+// Procedural product illustrations for Sway's curated catalog of original brands.
 const hues: Record<string, number> = {
   p_halvo_q7: 258,
   p_brisane_anc2: 205,

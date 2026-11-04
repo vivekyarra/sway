@@ -38,8 +38,8 @@ func rows(t *testing.T, k *testkit.Kit, orderID string) map[string]row {
 	return out
 }
 
-// Spec E1 (attribution half) + E8 + E11: Priya and Maya paid, Dev and Tomás $0, blocked/duplicate excluded, books balance.
-func TestSeededAttribution(t *testing.T) {
+// Scenario E1 (attribution half) + E8 + E11: Priya and Maya paid, Dev and Tomás $0, blocked/duplicate excluded, books balance.
+func TestCuratedAttribution(t *testing.T) {
 	k := testkit.New(t)
 	ctx := context.Background()
 	dv, err := k.Shop.Decide(ctx, req)
@@ -115,7 +115,7 @@ func TestSeededAttribution(t *testing.T) {
 	}
 }
 
-// Spec E9: content didn't matter -> share 0, the whole commission returns to the merchant.
+// Scenario E9: content didn't matter -> share 0, the whole commission returns to the merchant.
 func TestContentDidNotMatterReturnsCommission(t *testing.T) {
 	k := testkit.New(t)
 	ctx := context.Background()

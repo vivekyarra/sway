@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { buy } from "./helpers";
 
-// The whole judge tour (spec 4.6), through the real UI, must tick all eight steps.
+// The whole judge tour, through the real UI, must tick all eight steps.
 test("judge tour completes end to end", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -13,7 +13,7 @@ test("judge tour completes end to end", async ({ page }) => {
   await expect(page.getByText("Why I chose this")).toBeVisible();
   await expect(page.getByText(/The agent picked Halvo Q7/)).toBeVisible();
 
-  await page.getByRole("button", { name: /Remove Priya Raman/ }).click(); // 2
+  await page.getByRole("button", { name: /Remove & re-run without Priya Raman/ }).click(); // 2
   await expect(page.getByText("That source swayed the sale")).toBeVisible();
   await expect(page.getByText(/I'd pick\s*Brisane ANC2/)).toBeVisible();
   await page.getByRole("button", { name: /Restore source/ }).click();
@@ -29,7 +29,7 @@ test("judge tour completes end to end", async ({ page }) => {
   await expect(page.getByText(/Vested: the return window passed/)).toBeVisible();
 
   await page.goto("/creator/?id=c_priya"); // 6
-  await expect(page.getByText(/PayPal batch SIM-BATCH|PayPal batch [0-9A-Z]{8,}/).first()).toBeVisible();
+  await expect(page.getByText(/PayPal batch TEST-BATCH|PayPal batch [0-9A-Z]{8,}/).first()).toBeVisible();
 
   await page.goto("/shop/"); // 7
   await page.getByRole("button", { name: "Carry-on luggage" }).click();

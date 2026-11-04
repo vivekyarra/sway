@@ -3,8 +3,8 @@
 //	sway serve    HTTP API + UI (and the background worker when WORKER_INLINE=true)
 //	sway worker   background worker only (attribution, vesting, payouts, webhooks)
 //	sway migrate  apply database migrations
-//	sway seed     install the demo world if the database is empty
-//	sway reset    wipe and rebuild the demo (demo mode only)
+//	sway seed     install the catalog and order history if the database is empty
+//	sway reset    wipe and rebuild all data (TEST_TOOLS=true only)
 //	sway healthcheck  exit 0 if GET /api/health on $PORT succeeds (container health checks)
 package main
 
@@ -81,7 +81,7 @@ func run(cmd string, log *slog.Logger) error {
 		a.Close()
 		return nil
 	case "reset":
-		if !cfg.DemoMode {
+		if !cfg.TestTools {
 			return errors.New("reset is only available with DEMO_MODE=true")
 		}
 		a, err := app.New(ctx, cfg, log)
@@ -89,7 +89,7 @@ func run(cmd string, log *slog.Logger) error {
 			return err
 		}
 		defer a.Close()
-		return a.Demo.Reset(ctx, a.Classifier)
+		return a.History.Reset(ctx, a.Classifier)
 	case "worker":
 		a, err := app.New(ctx, cfg, log)
 		if err != nil {
@@ -119,7 +119,7 @@ func run(cmd string, log *slog.Logger) error {
 		}
 		errc := make(chan error, 1)
 		go func() {
-			log.Info("listening", "addr", cfg.Addr, "llm", a.Agent.Describe(), "paypal", a.Pay.PP.Mode(), "demo", cfg.DemoMode, "worker_inline", cfg.WorkerInline, "version", app.Version)
+			log.Info("listening", "addr", cfg.Addr, "llm", a.Agent.Describe(), "paypal", a.Pay.PP.Mode(), "test_tools", cfg.TestTools, "worker_inline", cfg.WorkerInline, "version", app.Version)
 			errc <- srv.ListenAndServe()
 		}()
 		select {

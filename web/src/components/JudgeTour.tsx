@@ -25,9 +25,9 @@ export function JudgeTour() {
 
   const count = done.length;
   return (
-    <div className="fixed bottom-4 right-4 z-50 w-[min(360px,calc(100vw-2rem))]">
+    <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-[min(360px,calc(100vw-2rem))] justify-end [&>*]:pointer-events-auto">
       {open ? (
-        <section aria-label="Judge tour" className="card rise overflow-hidden shadow-[var(--shadow-lg)]">
+        <section aria-label="Judge tour" className="card rise w-full overflow-hidden shadow-[var(--shadow-lg)]">
           <div className="flex items-center justify-between border-b border-line bg-ink px-4 py-3 text-white">
             <div>
               <div className="text-sm font-semibold">3-minute judge tour</div>
@@ -63,9 +63,9 @@ export function JudgeTour() {
                       password: {cfg.paypal.buyer_password}
                     </div>
                   )}
-                  {s.id === 3 && cfg?.paypal.mode === "sim" && (
+                  {s.id === 3 && cfg?.paypal.mode === "test" && (
                     <div className="mx-2 mb-2 ml-10 rounded-lg bg-paper-2 px-3 py-2 text-[11px] leading-5 text-ink-2">
-                      Running without PayPal keys: checkout uses the labelled PayPal simulator.
+                      Checkout runs in PayPal test mode. Add PayPal credentials to check out with a Sandbox buyer.
                     </div>
                   )}
                 </li>
@@ -82,7 +82,7 @@ export function JudgeTour() {
           </div>
         </section>
       ) : (
-        <button onClick={() => setOpen(true)} className="btn btn-primary ml-auto flex shadow-[var(--shadow-lg)]" aria-expanded={false}>
+        <button onClick={() => setOpen(true)} className="btn btn-primary shadow-[var(--shadow-lg)]" aria-expanded={false}>
           <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/15 text-[11px]">{count}/8</span>
           Judge tour
         </button>

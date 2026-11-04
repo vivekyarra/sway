@@ -7,7 +7,7 @@ import (
 	"github.com/vivekyarra/sway/engine/internal/ledger"
 )
 
-// CreatorBalances are the five big numbers on a creator dashboard (spec 4.4), all derived from the ledger.
+// CreatorBalances are the five big numbers on a creator dashboard, all derived from the ledger.
 type CreatorBalances struct {
 	Pending    int64 `json:"pending_cents"`
 	Frozen     int64 `json:"frozen_cents"`

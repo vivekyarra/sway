@@ -1,9 +1,9 @@
-// Package demo builds the seeded history (spec 9.5) and resets the demo.
+// Package history builds the pre-loaded order history and resets the marketplace.
 //
-// Seeded history runs through the real pipeline (agent decisions, exact Shapley, ledger, vesting,
-// payouts, refunds, a clawback, a dispute) using the deterministic offline agent and no PayPal calls.
-// Every seeded order is marked seeded=true and shows "seeded history" instead of PayPal links.
-package demo
+// The order history runs through the real pipeline (agent decisions, exact Shapley, ledger, vesting,
+// payouts, refunds, a clawback, a dispute) using Sway's built-in local engine and no PayPal calls.
+// Every historical order is marked historical=true and is labelled as order history instead of linking to PayPal.
+package history
 
 import (
 	"context"
@@ -50,26 +50,31 @@ type Builder struct {
 	Log   *slog.Logger
 }
 
-// Seeded reports whether the database already holds the demo world.
-func Seeded(ctx context.Context, d *db.DB) (bool, error) {
+// Installed reports whether the database already holds the catalog.
+func Installed(ctx context.Context, d *db.DB) (bool, error) {
 	var n int
 	err := d.Pool.QueryRow(ctx, `SELECT count(*) FROM merchants`).Scan(&n)
 	return n > 0, err
 }
 
-// Install seeds the catalog and builds the seeded history.
+// Install loads the catalog and builds the order history.
 func (b *Builder) Install(ctx context.Context, cls screening.Classifier) error {
 	w, err := seed.Install(ctx, b.DB, int(b.Cfg.VestingWindow.Seconds()), cls)
 	if err != nil {
 		return err
 	}
 	b.World = w
+	for id, email := range b.Cfg.CreatorEmails {
+		if _, err := b.DB.Pool.Exec(ctx, `UPDATE creators SET paypal_email=$2 WHERE id=$1`, id, email); err != nil {
+			return err
+		}
+	}
 	return b.History(ctx)
 }
 
-// History creates the 12 seeded orders and drives them to a realistic mix of states.
+// History creates the 12 historical orders and drives them to a realistic mix of states.
 func (b *Builder) History(ctx context.Context) error {
-	ag := agent.New(b.DB, agent.Sim{}, 8, b.Cfg.Attribution.Tau)
+	ag := agent.New(b.DB, agent.Local{}, 8, b.Cfg.Attribution.Tau)
 	sh := &shop.Service{DB: b.DB, Agent: ag, Categories: b.World.Categories, Samples: b.Cfg.Attribution.Samples, MaxSources: b.Cfg.Attribution.MaxSources}
 	runner := &attribution.Runner{DB: b.DB, Agent: ag, Shop: sh, Cfg: b.Cfg.Attribution, AfterAllocate: b.Pay.Reconcile}
 	var orders []string
@@ -84,10 +89,10 @@ func (b *Builder) History(ctx context.Context) error {
 			if err := q.QueryRow(ctx, `SELECT commission_rate_bps FROM merchants WHERE id=$1`, dv.Chosen.MerchantID).Scan(&rate); err != nil {
 				return err
 			}
-			// Seeded orders use the production 30-day window so recent ones read as genuinely pending.
+			// Historical orders use the production 30-day window so recent ones read as genuinely pending.
 			if _, err := q.Exec(ctx, `INSERT INTO orders (id, decision_id, product_id, merchant_id, amount_cents, commission_rate_bps, sway_fee_bps, payment_mode, status,
-				captured_at, vests_at, buyer_email, seeded, created_at)
-				VALUES ($1,$2,$3,$4,$5,$6,$7,'seeded','CAPTURED', now() - make_interval(days=>$8), now() - make_interval(days=>$8) + interval '30 days', 'seeded-buyer@example.com', true,
+				captured_at, vests_at, buyer_email, historical, created_at)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,'historical','CAPTURED', now() - make_interval(days=>$8), now() - make_interval(days=>$8) + interval '30 days', 'historical-buyer@example.com', true,
 				now() - make_interval(days=>$8))`,
 				orderID, dv.ID, dv.Chosen.ID, dv.Chosen.MerchantID, dv.Chosen.PriceCents, rate, b.Cfg.SwayFeeBps, h.daysAgo); err != nil {
 				return err
@@ -104,7 +109,7 @@ func (b *Builder) History(ctx context.Context) error {
 		orders = append(orders, orderID)
 	}
 	// Orders 1-8 passed their return window; 9 was refunded before vesting.
-	if _, err := b.Pay.Refund(ctx, orders[8], 0, "seeded: returned within the window", ""); err != nil {
+	if _, err := b.Pay.Refund(ctx, orders[8], 0, "returned within the window", ""); err != nil {
 		return err
 	}
 	if _, err := b.DB.Pool.Exec(ctx, `UPDATE orders SET vests_at = now() - interval '1 minute' WHERE id = ANY($1)`, orders[:8]); err != nil {
@@ -113,26 +118,26 @@ func (b *Builder) History(ctx context.Context) error {
 	if _, err := b.Pay.VestDue(ctx); err != nil {
 		return err
 	}
-	if _, err := b.Pay.RunPayouts(ctx, "seeded"); err != nil {
+	if _, err := b.Pay.RunPayouts(ctx, "historical"); err != nil {
 		return err
 	}
 	// Order 3 (a standing desk) was returned after its commission was paid: a clawback the creator owes,
 	// netted against their future earnings. It deliberately does not involve the headphone creators,
 	// so the judge's live purchase pays Priya and Maya in full.
-	if _, err := b.Pay.Refund(ctx, orders[2], 0, "seeded: returned after payout", ""); err != nil {
+	if _, err := b.Pay.Refund(ctx, orders[2], 0, "returned after payout", ""); err != nil {
 		return err
 	}
-	// Order 11 has an open (simulated) dispute: its commission is frozen.
+	// Order 11 has an open (testMode) dispute: its commission is frozen.
 	if err := b.Pay.HandleDispute(ctx, orders[10], payments.DisputeOpen, true); err != nil {
 		return err
 	}
 	if b.Log != nil {
-		b.Log.Info("seeded history ready", "orders", len(orders))
+		b.Log.Info("order history ready", "orders", len(orders))
 	}
 	return nil
 }
 
-// Reset wipes all transactional data and rebuilds the demo (spec 10, demo mode only).
+// Reset wipes all transactional data and rebuilds the catalog and history (test tools only).
 // The LLM run cache is kept so the reset is fast and identical decisions stay identical.
 func (b *Builder) Reset(ctx context.Context, cls screening.Classifier) error {
 	err := b.DB.Tx(ctx, func(q db.Q) error {
@@ -140,7 +145,7 @@ func (b *Builder) Reset(ctx context.Context, cls screening.Classifier) error {
 			return err
 		}
 		_, err := q.Exec(ctx, `TRUNCATE ledger_entries, attributions, attribution_jobs, refunds, payout_items, payout_batches, webhook_events, jobs,
-			orders, decisions, shopping_sessions, paypal_sim_objects, idempotency_keys, source_products, sources, products, creators, merchants RESTART IDENTITY CASCADE`)
+			orders, decisions, shopping_sessions, paypal_test_objects, idempotency_keys, source_products, sources, products, creators, merchants RESTART IDENTITY CASCADE`)
 		return err
 	})
 	if err != nil {

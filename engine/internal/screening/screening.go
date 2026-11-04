@@ -1,4 +1,4 @@
-// Package screening keeps manipulative content out of decisions and payouts (spec 6.6):
+// Package screening keeps manipulative content out of decisions and payouts:
 // sources that try to instruct AI agents are blocked, and near-copies of earlier sources are
 // marked duplicate. Both earn $0 and the reason is shown to everyone.
 package screening
@@ -68,7 +68,7 @@ func Jaccard(a, b map[string]struct{}) float64 {
 	return float64(inter) / float64(len(a)+len(b)-inter)
 }
 
-// DuplicateThreshold is the 5-word-shingle Jaccard similarity above which a later source is a copy (spec 6.6).
+// DuplicateThreshold is the 5-word-shingle Jaccard similarity above which a later source is a copy.
 const DuplicateThreshold = 0.6
 
 // Verdict is the screening result for one source.

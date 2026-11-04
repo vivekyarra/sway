@@ -52,9 +52,9 @@ function OrderView({ id }: { id: string }) {
   const [msg, setMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    if (o?.attribution?.status === "DONE" && !o.seeded) completeStep(4);
-    if (o?.vested_at && !o.seeded) completeStep(5);
-    if (o && o.refunded_cents > 0 && !o.seeded) completeStep(7);
+    if (o?.attribution?.status === "DONE" && !o.historical) completeStep(4);
+    if (o?.vested_at && !o.historical) completeStep(5);
+    if (o && o.refunded_cents > 0 && !o.historical) completeStep(7);
   }, [o]);
 
   if (error) return <ErrorBox message={error.status === 404 ? "Order not found." : error.message} onRetry={refresh} />;
@@ -76,7 +76,7 @@ function OrderView({ id }: { id: string }) {
     try {
       await api.post(`/merchant/orders/${o!.id}/refund`, amount ? { amount_cents: amount, reason: "requested from order page" } : { reason: "requested from order page" });
       setMsg("Refund issued. Pending commission for this order is forfeited.");
-      if (!o!.seeded) completeStep(7);
+      if (!o!.historical) completeStep(7);
       refresh();
     } catch (e) {
       setMsg((e as Error).message);
@@ -94,13 +94,13 @@ function OrderView({ id }: { id: string }) {
           <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
             <StatusPill status={o.status} />
             {o.dispute_status !== "NONE" && <StatusPill status={o.dispute_status === "OPEN" ? "OPEN" : o.dispute_status} />}
-            {o.dispute_simulated && <Badge tone="sim">simulated dispute</Badge>}
-            {o.seeded ? <Badge>seeded history</Badge> : o.payment_mode === "sim" ? <Badge tone="sim">PayPal simulator</Badge> : <Badge tone="good">PayPal sandbox</Badge>}
+            {o.dispute_test && <Badge tone="test">test dispute</Badge>}
+            {o.historical ? <Badge>order history</Badge> : o.payment_mode === "test" ? <Badge tone="test">PayPal test mode</Badge> : <Badge tone="good">PayPal sandbox</Badge>}
             <span className="tabular font-semibold">{usd(o.amount_cents)}</span>
             {o.refunded_cents > 0 && <span className="text-forfeit">· {usd(o.refunded_cents)} refunded</span>}
           </div>
         </div>
-        {cfg?.demo_mode && (o.status === "CAPTURED" || o.status === "PARTIALLY_REFUNDED") && (
+        {cfg?.test_tools && (o.status === "CAPTURED" || o.status === "PARTIALLY_REFUNDED") && (
           <div className="flex gap-2">
             <button className="btn btn-ghost btn-sm" disabled={refunding} onClick={() => refund(Math.floor((o.amount_cents - o.refunded_cents) / 2))}>
               Refund 50%
@@ -231,10 +231,9 @@ function OrderView({ id }: { id: string }) {
             <h2 id="pp" className="text-lg font-semibold tracking-tight">
               Payment
             </h2>
+            {o.historical && <p className="mt-3 text-muted">Part of the order history loaded with the catalog, recorded without a PayPal transaction.</p>}
             <dl className="mt-3 space-y-2">
-              {o.seeded ? (
-                <div className="text-muted">Seeded history: no PayPal objects exist for this order.</div>
-              ) : (
+              {o.historical ? null : (
                 <>
                   <div className="flex justify-between gap-2">
                     <dt className="text-muted">PayPal order</dt>

@@ -1,5 +1,5 @@
-// Package seed loads the trademark-safe demo world (Section 9): one merchant, invented products,
-// invented creators and the sources they wrote. Everything here is fiction written for the demo.
+// Package seed loads Sway's curated marketplace: one merchant, its products, the creators who review
+// them and the sources they wrote. All brands, people and texts are original to Sway.
 package seed
 
 import (
@@ -167,7 +167,7 @@ func Apply(ctx context.Context, q db.Q, w *World, vestingWindowSeconds int) erro
 		specs["_scores"] = p.Scores
 		specJSON, _ := json.Marshal(specs)
 		if _, err := q.Exec(ctx, `INSERT INTO products (id,merchant_id,name,brand,category,price_cents,specs,tagline,image_url,source)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'demo') ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, brand=EXCLUDED.brand,
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'curated') ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, brand=EXCLUDED.brand,
 			category=EXCLUDED.category, price_cents=EXCLUDED.price_cents, specs=EXCLUDED.specs, tagline=EXCLUDED.tagline`,
 			p.ID, m.ID, p.Name, p.Brand, p.Category, p.PriceCents, specJSON, p.Tagline, "/products/"+p.ID+".svg"); err != nil {
 			return err
@@ -198,20 +198,20 @@ func Apply(ctx context.Context, q db.Q, w *World, vestingWindowSeconds int) erro
 	return nil
 }
 
-// Products returns the seeded products as catalog values (with sim spec scores).
+// CatalogProducts returns the curated products as catalog values (with spec-sheet scores).
 func (w *World) CatalogProducts() []catalog.Product {
 	out := make([]catalog.Product, len(w.Products))
 	for i, p := range w.Products {
 		cp := p.Product
 		cp.Scores = p.Scores
 		cp.MerchantID = w.Merchant.ID
-		cp.Source = "demo"
+		cp.Source = "curated"
 		out[i] = cp
 	}
 	return out
 }
 
-// CatalogSources returns the seeded sources with creator names resolved (all active, unscreened).
+// CatalogSources returns the historical sources with creator names resolved (all active, unscreened).
 func (w *World) CatalogSources() []catalog.Source {
 	names := map[string]string{}
 	for _, c := range w.Creators {
@@ -225,7 +225,7 @@ func (w *World) CatalogSources() []catalog.Source {
 	return out
 }
 
-// Install loads, applies and screens the demo world in one go.
+// Install loads, applies and screens the curated catalog in one go.
 func Install(ctx context.Context, d *db.DB, vestingWindowSeconds int, cls screening.Classifier) (*World, error) {
 	w, err := Load()
 	if err != nil {

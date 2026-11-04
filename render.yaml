@@ -39,6 +39,8 @@ services:
         sync: false
       - key: PAYPAL_SANDBOX_BUYER_PASSWORD
         sync: false
+      - key: CREATOR_PAYPAL_EMAILS
+        sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: DECISION_MODEL

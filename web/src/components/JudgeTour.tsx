@@ -25,9 +25,9 @@ export function JudgeTour() {
 
   const count = done.length;
   return (
-    <div className="fixed bottom-4 right-4 z-50 w-[min(360px,calc(100vw-2rem))]">
+    <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-[min(360px,calc(100vw-2rem))] justify-end [&>*]:pointer-events-auto">
       {open ? (
-        <section aria-label="Judge tour" className="card rise overflow-hidden shadow-[var(--shadow-lg)]">
+        <section aria-label="Judge tour" className="card rise w-full overflow-hidden shadow-[var(--shadow-lg)]">
           <div className="flex items-center justify-between border-b border-line bg-ink px-4 py-3 text-white">
             <div>
               <div className="text-sm font-semibold">3-minute judge tour</div>
@@ -82,7 +82,7 @@ export function JudgeTour() {
           </div>
         </section>
       ) : (
-        <button onClick={() => setOpen(true)} className="btn btn-primary ml-auto flex shadow-[var(--shadow-lg)]" aria-expanded={false}>
+        <button onClick={() => setOpen(true)} className="btn btn-primary shadow-[var(--shadow-lg)]" aria-expanded={false}>
           <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/15 text-[11px]">{count}/8</span>
           Judge tour
         </button>

@@ -64,6 +64,11 @@ func (b *Builder) Install(ctx context.Context, cls screening.Classifier) error {
 		return err
 	}
 	b.World = w
+	for id, email := range b.Cfg.CreatorEmails {
+		if _, err := b.DB.Pool.Exec(ctx, `UPDATE creators SET paypal_email=$2 WHERE id=$1`, id, email); err != nil {
+			return err
+		}
+	}
 	return b.History(ctx)
 }
 

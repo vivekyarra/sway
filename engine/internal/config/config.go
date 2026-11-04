@@ -61,8 +61,9 @@ type Config struct {
 	VestingTick       time.Duration
 	AutoPayout        time.Duration // 0 disables automatic payout runs
 	TrustProxy        bool
-	RateLimitScale    int    // multiplies every rate limit (load tests and CI e2e); 1 in production
-	WebDir            string // optional override for UI assets (otherwise embedded)
+	RateLimitScale    int               // multiplies every rate limit (load tests and CI e2e); 1 in production
+	CreatorEmails     map[string]string // CREATOR_PAYPAL_EMAILS=c_priya=a@b,c_maya=c@d (sandbox payout receivers)
+	WebDir            string            // optional override for UI assets (otherwise embedded)
 	AllowedOrigins    []string
 	PayPal            PayPal
 	LLM               LLM
@@ -141,6 +142,7 @@ func Load() (Config, error) {
 		AutoPayout:        time.Duration(num("AUTO_PAYOUT_SECONDS", 30)) * time.Second,
 		TrustProxy:        boolean("TRUST_PROXY", false),
 		RateLimitScale:    clamp(num("RATE_LIMIT_SCALE", 1), 1, 1000),
+		CreatorEmails:     pairs(str("CREATOR_PAYPAL_EMAILS", "")),
 		WebDir:            str("WEB_DIR", ""),
 		AllowedOrigins:    splitList(str("ALLOWED_ORIGINS", "http://localhost:3000")),
 		PayPal: PayPal{
@@ -194,6 +196,16 @@ func clamp(v, lo, hi int) int {
 		return hi
 	}
 	return v
+}
+
+func pairs(s string) map[string]string {
+	out := map[string]string{}
+	for _, p := range splitList(s) {
+		if k, v, ok := strings.Cut(p, "="); ok && strings.TrimSpace(k) != "" && strings.Contains(v, "@") {
+			out[strings.TrimSpace(k)] = strings.TrimSpace(v)
+		}
+	}
+	return out
 }
 
 func splitList(s string) []string {

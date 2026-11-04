@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -644,7 +645,7 @@ func GetMerchant(ctx context.Context, q db.Q, swayFeeBps int) (Merchant, error) 
 		m.Webhooks = append(m.Webhooks, w)
 	}
 	wrows.Close()
-	if m.Verification, err = ledger.Verify(ctx, q); err != nil {
+	if m.Verification, err = cachedVerify(ctx, q); err != nil {
 		return m, err
 	}
 	drows, err := q.Query(ctx, `SELECT to_char(d,'MM-DD'),
@@ -739,14 +740,70 @@ func orderRows(ctx context.Context, q db.Q) ([]OrderRow, error) {
 		out = append(out, r)
 	}
 	rows.Close()
-	for i := range out {
-		s, err := ledger.SummarizeOrder(ctx, q, out[i].ID)
-		if err != nil {
+	// One grouped aggregate for every order's split (no per-order queries).
+	ids := make([]string, len(out))
+	idx := make(map[string]int, len(out))
+	for i, o := range out {
+		ids[i] = o.ID
+		idx[o.ID] = i
+	}
+	srows, err := q.Query(ctx, `SELECT order_id,
+		COALESCE(SUM(amount_cents) FILTER (WHERE type=$2),0)::bigint,
+		COALESCE(SUM(amount_cents) FILTER (WHERE type=$3),0)::bigint,
+		COALESCE(SUM(amount_cents) FILTER (WHERE type=$4),0)::bigint,
+		COALESCE(SUM(amount_cents) FILTER (WHERE type=$5),0)::bigint
+		FROM ledger_entries WHERE order_id = ANY($1) GROUP BY order_id`, ids, ledger.CommissionReserved, ledger.AccruePending, ledger.SwayFeePending, ledger.ReturnToMerchant)
+	if err != nil {
+		return nil, err
+	}
+	defer srows.Close()
+	for srows.Next() {
+		var id string
+		var c, pool, fee, ret int64
+		if err := srows.Scan(&id, &c, &pool, &fee, &ret); err != nil {
 			return nil, err
 		}
-		out[i].CommissionCents, out[i].CreatorPoolCents, out[i].FeeCents, out[i].ReturnedCents, out[i].Balanced = s.Commission, s.CreatorPoolNet, s.SwayFee, s.ReturnedToMerchant, s.Balanced
+		r := &out[idx[id]]
+		r.CommissionCents, r.CreatorPoolCents, r.FeeCents, r.ReturnedCents = c, pool, fee, ret
+		r.Balanced = c == pool+fee+ret
 	}
-	return out, nil
+	for i := range out {
+		if out[i].CommissionCents == 0 {
+			out[i].Balanced = true // nothing reserved yet: trivially balanced
+		}
+	}
+	return out, srows.Err()
+}
+
+var verifyCache struct {
+	sync.Mutex
+	full time.Time // last full walk
+	seq  int64     // last verified seq
+	v    ledger.Verification
+}
+
+// cachedVerify keeps dashboards cheap at any ledger size: new entries are verified incrementally against the
+// last verified hash, and the whole chain is re-walked every 60s to catch edits to old rows.
+// /api/ledger/verify and the MCP tool always do a fresh full walk.
+func cachedVerify(ctx context.Context, q db.Q) (ledger.Verification, error) {
+	verifyCache.Lock()
+	defer verifyCache.Unlock()
+	c := &verifyCache
+	if c.seq == 0 || !c.v.OK || time.Since(c.full) > time.Minute {
+		v, last, err := ledger.VerifyAfter(ctx, q, 0, ledger.GenesisHash)
+		if err != nil {
+			return v, err
+		}
+		c.v, c.seq, c.full = v, last, time.Now()
+		return v, nil
+	}
+	tail, last, err := ledger.VerifyAfter(ctx, q, c.seq, c.v.Head)
+	if err != nil {
+		return tail, err
+	}
+	tail.Entries += c.v.Entries
+	c.v, c.seq = tail, last
+	return tail, nil
 }
 
 func round2(x float64) float64 { return float64(int64(x*100+sign(x)*0.5)) / 100 }

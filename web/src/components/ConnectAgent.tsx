@@ -20,7 +20,7 @@ export function ConnectAgent() {
     <section className="border-t border-line bg-ink text-white">
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-16 sm:px-6 lg:grid-cols-[1fr_1.1fr]">
         <div>
-          <div className="eyebrow text-white/50">Bring your own agent</div>
+          <div className="text-[0.72rem] font-bold uppercase tracking-[0.12em] text-white/75">Bring your own agent</div>
           <h2 className="display mt-2 text-4xl sm:text-5xl">
             Any AI agent can shop <span className="italic text-[#a99bff]">through Sway.</span>
           </h2>
@@ -51,7 +51,7 @@ export function ConnectAgent() {
               <pre className="overflow-x-auto p-4 font-mono text-[12.5px] leading-6 text-white/90">{code}</pre>
             </div>
           ))}
-          <p className="text-xs text-white/50">Endpoint: Streamable HTTP, JSON-RPC 2.0, MCP protocol 2025-06-18. Origin-checked and rate limited.</p>
+          <p className="text-xs text-white/70">Endpoint: Streamable HTTP, JSON-RPC 2.0, MCP protocol 2025-06-18. Origin-checked and rate limited.</p>
         </div>
       </div>
     </section>

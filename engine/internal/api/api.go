@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -78,6 +79,7 @@ func (s *Server) Handler() http.Handler {
 	r("POST /api/merchant/orders/{id}/refund", s.writeLimit, post(s.refund))
 	r("POST /api/merchant/orders/{id}/simulate-dispute", s.writeLimit, post(s.demoOnly(s.simulateDispute)))
 	r("POST /api/merchant/payouts/run", s.writeLimit, post(s.runPayouts))
+	r("POST /api/merchant/settings", s.writeLimit, post(s.updateSettings))
 	r("POST /api/demo/fast-forward", s.writeLimit, post(s.demoOnly(s.fastForward)))
 	r("POST /api/demo/reset", s.writeLimit, post(s.demoOnly(s.reset)))
 	r("GET /api/ledger/verify", s.readLimit, s.verifyLedger)
@@ -419,6 +421,43 @@ func (s *Server) runPayouts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, plan)
+}
+
+// updateSettings changes the merchant's commission rate and vesting window (spec 4.5). The Sway fee stays
+// read-only. New orders use the new values; existing orders keep the terms they were bought under.
+func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		CommissionRateBps    *int `json:"commission_rate_bps"`
+		VestingWindowSeconds *int `json:"vesting_window_seconds"`
+	}
+	if err := decode(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_json", "Body must be JSON: {\"commission_rate_bps\": 800, \"vesting_window_seconds\": 120}")
+		return
+	}
+	if body.CommissionRateBps != nil && (*body.CommissionRateBps < 0 || *body.CommissionRateBps > 3000) {
+		writeError(w, http.StatusUnprocessableEntity, "invalid", "Commission must be between 0% and 30%")
+		return
+	}
+	minVest := 10
+	if !s.Cfg.DemoMode {
+		minVest = 86400
+	}
+	if body.VestingWindowSeconds != nil && (*body.VestingWindowSeconds < minVest || *body.VestingWindowSeconds > 90*86400) {
+		writeError(w, http.StatusUnprocessableEntity, "invalid", fmt.Sprintf("Vesting window must be between %ds and 90 days", minVest))
+		return
+	}
+	_, err := s.DB.Pool.Exec(r.Context(), `UPDATE merchants SET commission_rate_bps=COALESCE($1, commission_rate_bps), vesting_window_seconds=COALESCE($2, vesting_window_seconds)
+		WHERE id=(SELECT id FROM merchants ORDER BY created_at LIMIT 1)`, body.CommissionRateBps, body.VestingWindowSeconds)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	m, err := views.GetMerchant(r.Context(), s.DB.Pool, s.Cfg.SwayFeeBps)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"commission_rate_bps": m.CommissionRateBps, "vesting_window_seconds": m.VestingSeconds, "sway_fee_bps": m.SwayFeeBps})
 }
 
 func (s *Server) fastForward(w http.ResponseWriter, r *http.Request) {

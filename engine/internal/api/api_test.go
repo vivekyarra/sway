@@ -86,7 +86,23 @@ func TestHTTPFlowAndIdempotency(t *testing.T) {
 	if resp.StatusCode != 200 {
 		t.Fatal("overview failed")
 	}
-	resp, v := call(t, ts, "GET", "/api/ledger/verify", ``, nil)
+	var v map[string]any
+	resp, st := call(t, ts, "POST", "/api/merchant/settings", `{"commission_rate_bps":1000,"vesting_window_seconds":60}`, nil)
+	if resp.StatusCode != 200 || st["commission_rate_bps"].(float64) != 1000 {
+		t.Fatalf("settings %d %v", resp.StatusCode, st)
+	}
+	if resp, _ := call(t, ts, "POST", "/api/merchant/settings", `{"commission_rate_bps":9000}`, nil); resp.StatusCode != 422 {
+		t.Fatalf("out-of-range commission must be 422, got %d", resp.StatusCode)
+	}
+	_, d2 := call(t, ts, "POST", "/api/agent/decide", `{"request":"A standing desk that stays stable at full height for a tall person, under $450."}`, nil)
+	_, co := call(t, ts, "POST", "/api/paypal/orders", `{"decision_id":"`+d2["id"].(string)+`"}`, nil)
+	call(t, ts, "POST", "/api/paypal/orders/"+co["paypal_order_id"].(string)+"/capture", ``, nil)
+	m.Drain(t)
+	_, o3 := call(t, ts, "GET", "/api/orders/"+co["order_id"].(string), ``, nil)
+	if c := o3["split"].(map[string]any)["commission_cents"].(float64); c != 3990 { // 10% of $399
+		t.Fatalf("new orders must use the new 10%% rate, commission %v", c)
+	}
+	resp, v = call(t, ts, "GET", "/api/ledger/verify", ``, nil)
 	if resp.StatusCode != 200 || v["ok"] != true {
 		t.Fatalf("verify %v", v)
 	}

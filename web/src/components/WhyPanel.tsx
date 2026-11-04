@@ -176,7 +176,7 @@ export function WhyPanel({ decision }: { decision: Decision }) {
                     </div>
                   )}
                 </div>
-                <button className="btn btn-ghost btn-sm shrink-0" disabled={!!rerunning || isOut} onClick={() => remove(s)} aria-label={`Remove ${s.creator_name}'s source and re-run`}>
+                <button className="btn btn-ghost btn-sm shrink-0" disabled={!!rerunning || isOut} onClick={() => remove(s)} aria-label={`Remove & re-run without ${s.creator_name}'s source`}>
                   {rerunning === s.id ? <Spinner /> : "Remove & re-run"}
                 </button>
               </div>

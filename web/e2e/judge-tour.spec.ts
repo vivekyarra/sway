@@ -13,7 +13,7 @@ test("judge tour completes end to end", async ({ page }) => {
   await expect(page.getByText("Why I chose this")).toBeVisible();
   await expect(page.getByText(/The agent picked Halvo Q7/)).toBeVisible();
 
-  await page.getByRole("button", { name: /Remove Priya Raman/ }).click(); // 2
+  await page.getByRole("button", { name: /Remove & re-run without Priya Raman/ }).click(); // 2
   await expect(page.getByText("That source swayed the sale")).toBeVisible();
   await expect(page.getByText(/I'd pick\s*Brisane ANC2/)).toBeVisible();
   await page.getByRole("button", { name: /Restore source/ }).click();

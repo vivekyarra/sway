@@ -52,6 +52,63 @@ function Trend({ m }: { m: Merchant }) {
   );
 }
 
+function Settings({ m, onSaved }: { m: Merchant; onSaved: (msg: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [rate, setRate] = useState(String(m.commission_rate_bps / 100));
+  const [vest, setVest] = useState(String(m.vesting_window_seconds));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  if (!open)
+    return (
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+        <Badge>Commission {(m.commission_rate_bps / 100).toFixed(1).replace(/\.0$/, "")}% of order</Badge>
+        <Badge>Vesting window {dur(m.vesting_window_seconds)}</Badge>
+        <Badge title="Read-only: Sway's cut of the creator pool">Sway fee {(m.sway_fee_bps / 100).toFixed(0)}% of creator pool</Badge>
+        <button className="link text-xs" onClick={() => setOpen(true)}>
+          Edit settings
+        </button>
+      </div>
+    );
+  return (
+    <form
+      className="card mt-3 flex flex-wrap items-end gap-3 p-3 text-sm"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setBusy(true);
+        setErr(null);
+        try {
+          await api.post("/merchant/settings", { commission_rate_bps: Math.round(Number(rate) * 100), vesting_window_seconds: Math.round(Number(vest)) });
+          setOpen(false);
+          onSaved("Settings saved. New purchases use the new terms; existing orders keep theirs.");
+        } catch (e2) {
+          setErr((e2 as Error).message);
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <label className="flex flex-col gap-1">
+        <span className="text-xs text-muted">Commission (% of order)</span>
+        <input type="number" min={0} max={30} step={0.5} value={rate} onChange={(e) => setRate(e.target.value)} className="w-28 rounded-lg bg-paper px-3 py-1.5 ring-1 ring-line focus:outline-none focus:ring-2 focus:ring-accent" />
+      </label>
+      <label className="flex flex-col gap-1">
+        <span className="text-xs text-muted">Vesting window (seconds)</span>
+        <input type="number" min={10} step={1} value={vest} onChange={(e) => setVest(e.target.value)} className="w-36 rounded-lg bg-paper px-3 py-1.5 ring-1 ring-line focus:outline-none focus:ring-2 focus:ring-accent" />
+      </label>
+      <span className="text-xs text-muted">Sway fee {(m.sway_fee_bps / 100).toFixed(0)}% of creator pool (read-only)</span>
+      <div className="ml-auto flex gap-2">
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(false)}>
+          Cancel
+        </button>
+        <button type="submit" className="btn btn-primary btn-sm" disabled={busy}>
+          {busy ? <Spinner /> : null} Save
+        </button>
+      </div>
+      {err && <div className="w-full text-xs text-forfeit">{err}</div>}
+    </form>
+  );
+}
+
 function OrderActions({ row, onDone }: { row: OrderRow; onDone: (msg: string) => void }) {
   const cfg = useConfig();
   const [busy, setBusy] = useState(false);
@@ -251,11 +308,7 @@ function MerchantView() {
         <div>
           <div className="eyebrow">Merchant</div>
           <h1 className="display mt-1 text-4xl">{m.name}</h1>
-          <div className="mt-2 flex flex-wrap gap-2 text-sm">
-            <Badge>Commission {(m.commission_rate_bps / 100).toFixed(0)}% of order</Badge>
-            <Badge>Vesting window {dur(m.vesting_window_seconds)}</Badge>
-            <Badge title="Read-only: Sway's cut of the creator pool">Sway fee {(m.sway_fee_bps / 100).toFixed(0)}% of creator pool</Badge>
-          </div>
+          <Settings m={m} onSaved={note} />
         </div>
         <div className="flex flex-wrap gap-2">
           {cfg?.demo_mode && (

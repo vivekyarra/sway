@@ -40,19 +40,19 @@ export default function Home() {
           </button>
         </div>
 
-        <dl className="mt-12 grid max-w-3xl grid-cols-2 gap-px overflow-hidden rounded-2xl border border-line bg-line sm:grid-cols-4" aria-live="polite">
+        <ul className="mt-12 grid max-w-3xl grid-cols-2 gap-px overflow-hidden rounded-2xl border border-line bg-line sm:grid-cols-4" aria-label="Live demo totals">
           {[
             ["Agent-driven sales", k ? usd(k.agent_revenue_cents) : "…"],
             ["Paid to creators", k ? usd(k.commission_paid_cents) : "…"],
             ["Forfeited on returns", k ? usd(k.commission_forfeited_cents) : "…"],
             ["Ledger", data ? (data.verification.ok ? "Verified ✓" : "Broken ✕") : "…"],
           ].map(([label, value]) => (
-            <div key={label} className="bg-card px-4 py-3">
-              <dt className="text-xs text-muted">{label}</dt>
-              <dd className="tabular mt-0.5 text-lg font-semibold">{value}</dd>
-            </div>
+            <li key={label} className="bg-card px-4 py-3">
+              <span className="block text-xs text-muted">{label}</span>
+              <span className="tabular mt-0.5 block text-lg font-semibold">{value}</span>
+            </li>
           ))}
-        </dl>
+        </ul>
       </section>
 
       <section className="border-y border-line bg-card">

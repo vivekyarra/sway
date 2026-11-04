@@ -151,7 +151,7 @@ flowchart TB
 | Unit and integration (55 Go tests, race detector) | Shapley properties; 1,000 random allocations and 20,000 random splits balance exactly; ledger idempotency, append-only triggers, tamper detection and overdraft refusal; flip across 10 phrasings; screening; Claude and PayPal contract tests against mock APIs; MCP session; spec scenarios E1, E3–E7, E9–E11 |
 | Chaos | 30 rounds and 90 orders of random refunds, disputes, vesting, payouts and webhook replays. After every round: per-creator conservation (`earned = pending + frozen + vested + paid − owed + forfeited + clawed`), no negative bucket, every order balanced, hash chain intact |
 | Concurrency storm | 10 parallel captures per order with racing refunds, disputes and payouts. This test found a real payout/dispute race and a lock-order deadlock, both fixed |
-| Browser E2E (Playwright, real binary + Postgres) | The full 8-step judge tour; E2 flip; E4/E6/E7 refunds and disputes; E8 screening; E9; E10 idempotent replay; MCP agent → checkout handoff; no horizontal scroll on phones |
+| Browser E2E (Playwright, real binary + Postgres) | The full 8-step judge tour; E2 flip; E4/E6/E7 refunds and disputes; E8 screening; E9; E10 idempotent replay; MCP agent → checkout handoff; no horizontal scroll on phones; an axe-core WCAG 2.1 AA audit of every surface (no serious or critical violations) |
 | Load ([`cmd/swayload`](engine/cmd/swayload)) | Concurrent shoppers through decide → counterfactual → order → capture → refund, then settle and assert zero 5xx, every order balanced and the ledger verified |
 
 Load test on a 4-core box with local Postgres (offline agent), **128 concurrent shoppers, 2,000 purchases**:
@@ -242,7 +242,7 @@ Locally, webhooks need a tunnel. You can also skip them: capture and refund API 
 | Criterion | Where to look |
 |---|---|
 | Technological implementation | Exact Shapley over parallel LLM re-runs with caching, variance and a Monte Carlo fallback; the full PayPal lifecycle (orders, capture, refunds, verified webhooks, payouts with polling, cancel-unclaimed, idempotency); a double-entry hash-chained ledger; chaos, concurrency and load tests |
-| Design | Three role surfaces in one visual system, a self-ticking judge tour, the "Why I chose this" panel with the flip moment, the coalition explorer, AG Grid dashboards, phone layouts |
+| Design | Three role surfaces in one visual system, a self-ticking judge tour, the "Why I chose this" panel with the flip moment, the coalition explorer, AG Grid dashboards, phone layouts, a WCAG 2.1 AA audit in CI |
 | Potential impact | Creators losing income to AI agents get paid per purchase they influenced; merchants pay only for influence on kept sales; shoppers see why the agent chose |
 | Innovation | Payment for **causal influence on kept purchases**, measured counterfactually, with manipulation earning $0, plus an MCP server that makes this a layer under any agent |
 | Presentation | The 3-minute judge tour, this README, [`devpost/`](devpost) (submission text and video script) |

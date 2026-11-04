@@ -33,7 +33,7 @@ test("E8 manipulation is screened out with reasons", async ({ page }) => {
   await expect(page.getByText("Screened out before the agent read anything")).toBeVisible();
   await expect(page.getByText(/Blocked: tries to instruct AI agents/)).toBeVisible();
   await expect(page.getByText(/Duplicate of Priya Raman's earlier source/)).toBeVisible();
-  await expect(page.getByRole("button", { name: /Remove DealBot/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /without DealBot/ })).toHaveCount(0);
 });
 
 // E9: when specs alone decide, the whole commission goes back to the merchant and the UI says so.

@@ -231,10 +231,9 @@ function OrderView({ id }: { id: string }) {
             <h2 id="pp" className="text-lg font-semibold tracking-tight">
               Payment
             </h2>
+            {o.seeded && <p className="mt-3 text-muted">Seeded history: no PayPal objects exist for this order.</p>}
             <dl className="mt-3 space-y-2">
-              {o.seeded ? (
-                <div className="text-muted">Seeded history: no PayPal objects exist for this order.</div>
-              ) : (
+              {o.seeded ? null : (
                 <>
                   <div className="flex justify-between gap-2">
                     <dt className="text-muted">PayPal order</dt>

@@ -1,0 +1,97 @@
+{
+  "merchant": {
+    "id": "m_larkline",
+    "name": "Larkline Audio & Travel",
+    "paypal_merchant_email": "larkline-business@example.com",
+    "commission_rate_bps": 800
+  },
+  "categories": {
+    "headphones": {
+      "label": "Headphones",
+      "keywords": ["headphone", "headphones", "earphones", "earbuds", "cans", "noise-cancelling", "noise cancelling", "anc"],
+      "suggested_prompt": "I need noise-cancelling headphones for long-haul flights, under $250."
+    },
+    "luggage": {
+      "label": "Carry-on luggage",
+      "keywords": ["suitcase", "carry-on", "carry on", "luggage", "roller", "bag for", "cabin bag"],
+      "suggested_prompt": "A carry-on suitcase for weekly business trips that survives rough handling, under $220."
+    },
+    "desks": {
+      "label": "Standing desks",
+      "keywords": ["standing desk", "sit-stand", "sit stand", "desk"],
+      "suggested_prompt": "A standing desk that stays stable at full height for a tall person, under $450."
+    }
+  },
+  "products": [
+    {
+      "id": "p_halvo_q7", "name": "Halvo Q7", "brand": "Halvo", "category": "headphones", "price_cents": 22900,
+      "tagline": "Memory-foam over-ears with adaptive ANC",
+      "specs": {"form": "over-ear", "anc": "Adaptive ANC", "battery_hours": 30, "weight_g": 268, "cups": "memory foam", "case": "flat-fold"},
+      "scores": {"anc": 0.82, "battery": 0.70, "comfort": 0.60, "portability": 0.55, "weight": 0.65, "sound": 0.72}
+    },
+    {
+      "id": "p_brisane_anc2", "name": "Brisane ANC2", "brand": "Brisane", "category": "headphones", "price_cents": 19900,
+      "tagline": "Long-battery ANC with firm cups",
+      "specs": {"form": "over-ear", "anc": "Hybrid ANC (rated slightly stronger)", "battery_hours": 40, "weight_g": 310, "cups": "firm protein leather", "case": "rigid shell"},
+      "scores": {"anc": 0.88, "battery": 0.92, "comfort": 0.55, "portability": 0.50, "weight": 0.48, "sound": 0.72}
+    },
+    {
+      "id": "p_orrin_air", "name": "Orrin Air", "brand": "Orrin", "category": "headphones", "price_cents": 14900,
+      "tagline": "Featherweight on-ears with light ANC",
+      "specs": {"form": "on-ear", "anc": "Light ANC", "battery_hours": 22, "weight_g": 220, "cups": "foam", "case": "soft pouch"},
+      "scores": {"anc": 0.52, "battery": 0.50, "comfort": 0.50, "portability": 0.78, "weight": 0.88, "sound": 0.62}
+    },
+    {
+      "id": "p_tellum_pro", "name": "Tellum Pro", "brand": "Tellum", "category": "headphones", "price_cents": 27900,
+      "tagline": "Flagship ANC, flagship price",
+      "specs": {"form": "over-ear", "anc": "Flagship ANC", "battery_hours": 32, "weight_g": 290, "cups": "velour", "case": "hard case"},
+      "scores": {"anc": 0.96, "battery": 0.75, "comfort": 0.62, "portability": 0.50, "weight": 0.55, "sound": 0.80}
+    },
+    {
+      "id": "p_wendmere_c22", "name": "Wendmere Carry 22", "brand": "Wendmere", "category": "luggage", "price_cents": 18900,
+      "tagline": "Polycarbonate spinner with sealed wheels",
+      "specs": {"form": "hard-shell", "material": "polycarbonate", "wheels": "4 sealed spinners", "capacity_l": 38, "weight_kg": 3.1},
+      "scores": {"durability": 0.70, "capacity": 0.65, "weight": 0.60, "portability": 0.70}
+    },
+    {
+      "id": "p_pallis_s", "name": "Pallis Roller S", "brand": "Pallis", "category": "luggage", "price_cents": 14900,
+      "tagline": "Expandable soft-side roller",
+      "specs": {"form": "soft-side", "material": "ballistic nylon", "wheels": "2 inline", "capacity_l": 42, "weight_kg": 2.7},
+      "scores": {"durability": 0.68, "capacity": 0.80, "weight": 0.75, "portability": 0.65}
+    },
+    {
+      "id": "p_quorra_glide", "name": "Quorra Glide", "brand": "Quorra", "category": "luggage", "price_cents": 23900,
+      "tagline": "Brushed aluminium, over budget for most",
+      "specs": {"form": "hard-shell", "material": "aluminium", "wheels": "4 spinners", "capacity_l": 36, "weight_kg": 4.4},
+      "scores": {"durability": 0.80, "capacity": 0.55, "weight": 0.35, "portability": 0.60}
+    },
+    {
+      "id": "p_ostrel_l48", "name": "Ostrel Lift 48", "brand": "Ostrel", "category": "desks", "price_cents": 39900,
+      "tagline": "Dual-motor frame with crossbar",
+      "specs": {"motors": 2, "height_range_cm": "62-128", "crossbar": true, "top_cm": "120x70"},
+      "scores": {"stability": 0.62, "height": 0.85, "noise": 0.60, "capacity": 0.70}
+    },
+    {
+      "id": "p_benfold_rise", "name": "Benfold Rise", "brand": "Benfold", "category": "desks", "price_cents": 32900,
+      "tagline": "Single-motor value frame",
+      "specs": {"motors": 1, "height_range_cm": "70-125", "crossbar": false, "top_cm": "120x60"},
+      "scores": {"stability": 0.64, "height": 0.80, "noise": 0.55, "capacity": 0.60}
+    },
+    {
+      "id": "p_kavari_duo", "name": "Kavari Duo", "brand": "Kavari", "category": "desks", "price_cents": 48900,
+      "tagline": "Three-stage legs, premium frame",
+      "specs": {"motors": 2, "height_range_cm": "58-130", "crossbar": true, "top_cm": "140x70"},
+      "scores": {"stability": 0.85, "height": 0.90, "noise": 0.70, "capacity": 0.85}
+    }
+  ],
+  "creators": [
+    {"id": "c_priya", "display_name": "Priya Raman", "bio": "Travel writer. 40+ long-haul flights a year.", "paypal_email": "priya.raman@personal.example.com", "avatar_hue": 330},
+    {"id": "c_dev", "display_name": "Dev Okafor", "bio": "Audio YouTuber who measures everything.", "paypal_email": "dev.okafor@personal.example.com", "avatar_hue": 210},
+    {"id": "c_maya", "display_name": "Maya Lindqvist", "bio": "Frequent-flyer forum regular.", "paypal_email": "maya.lindqvist@personal.example.com", "avatar_hue": 150},
+    {"id": "c_tomas", "display_name": "Tomás Reyes", "bio": "Runs a spec-comparison site.", "paypal_email": "tomas.reyes@personal.example.com", "avatar_hue": 40},
+    {"id": "c_jonah", "display_name": "Jonah Mills", "bio": "Flight attendant, 200 trips a year.", "paypal_email": "jonah.mills@personal.example.com", "avatar_hue": 260},
+    {"id": "c_ana", "display_name": "Ana Sato", "bio": "Ergonomics consultant.", "paypal_email": "ana.sato@personal.example.com", "avatar_hue": 10},
+    {"id": "c_dealbot", "display_name": "DealBot Weekly", "bio": "Automated deals newsletter.", "paypal_email": "dealbot@personal.example.com", "avatar_hue": 0},
+    {"id": "c_copycat", "display_name": "Copycat Reviews", "bio": "Aggregated reviews.", "paypal_email": "copycat@personal.example.com", "avatar_hue": 90}
+  ]
+}

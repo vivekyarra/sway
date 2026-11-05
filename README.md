@@ -209,7 +209,7 @@ cd engine && DATABASE_URL=postgres://localhost:5432/sway?sslmode=disable go run 
 
 **Connect PayPal Sandbox and Claude.** Copy `.env.example` to `.env` and set `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_WEBHOOK_ID` (webhook URL `https://<host>/api/webhooks/paypal`) and `ANTHROPIC_API_KEY`. `PAYPAL_SANDBOX_BUYER_EMAIL` / `_PASSWORD` appear in the judge tour, and `CREATOR_PAYPAL_EMAILS` routes creator payouts to Sandbox accounts you can log into. `CHANNEL3_API_KEY` with `CATALOG_MODE=live` opens the live product catalog.
 
-**Deploy:** [`render.yaml`](render.yaml) provisions the web service, a background worker and Postgres on Render.
+**Deploy:** [`render.yaml`](render.yaml) provisions the web service (with the background worker running inline) and Postgres on Render's free tier.
 
 **Tests:**
 

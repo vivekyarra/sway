@@ -177,6 +177,7 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	out["paypal"] = map[string]string{"mode": s.Pay.PP.Mode(), "status": "ok"}
 	if p, ok := s.Pay.PP.(Pinger); ok {
 		if err := p.Ping(ctx); err != nil {
+			s.Log.Warn("paypal ping failed", "err", err)
 			out["paypal"] = map[string]string{"mode": s.Pay.PP.Mode(), "status": "unreachable"}
 		}
 	}

@@ -3,7 +3,7 @@
 //	sway serve    HTTP API + UI (and the background worker when WORKER_INLINE=true)
 //	sway worker   background worker only (attribution, vesting, payouts, webhooks)
 //	sway migrate  apply database migrations
-//	sway seed     install the catalog and order history if the database is empty
+//	sway install  install the catalog and order history if the database is empty
 //	sway reset    wipe and rebuild all data (TEST_TOOLS=true only)
 //	sway healthcheck  exit 0 if GET /api/health on $PORT succeeds (container health checks)
 package main
@@ -73,7 +73,7 @@ func run(cmd string, log *slog.Logger) error {
 		}
 		defer d.Close()
 		return d.Migrate(ctx)
-	case "seed":
+	case "install":
 		a, err := app.New(ctx, cfg, log)
 		if err != nil {
 			return err
@@ -140,5 +140,5 @@ func run(cmd string, log *slog.Logger) error {
 		<-bgDone
 		return nil
 	}
-	return fmt.Errorf("unknown command %q (serve, worker, migrate, seed, reset, healthcheck)", cmd)
+	return fmt.Errorf("unknown command %q (serve, worker, migrate, install, reset, healthcheck)", cmd)
 }

@@ -20,7 +20,7 @@ import (
 	"github.com/vivekyarra/sway/engine/internal/payments"
 	"github.com/vivekyarra/sway/engine/internal/paypal"
 	"github.com/vivekyarra/sway/engine/internal/screening"
-	"github.com/vivekyarra/sway/engine/internal/seed"
+	"github.com/vivekyarra/sway/engine/internal/marketplace"
 	"github.com/vivekyarra/sway/engine/internal/shop"
 	"github.com/vivekyarra/sway/engine/internal/webui"
 )
@@ -72,7 +72,7 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error)
 		provider = &paypal.TestMode{DB: d, SettleAfter: 4 * time.Second}
 	}
 
-	w, err := seed.Load()
+	w, err := marketplace.Load()
 	if err != nil {
 		return nil, err
 	}

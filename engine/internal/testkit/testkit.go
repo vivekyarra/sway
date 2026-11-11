@@ -13,14 +13,14 @@ import (
 	"github.com/vivekyarra/sway/engine/internal/jobs"
 	"github.com/vivekyarra/sway/engine/internal/payments"
 	"github.com/vivekyarra/sway/engine/internal/paypal"
-	"github.com/vivekyarra/sway/engine/internal/seed"
+	"github.com/vivekyarra/sway/engine/internal/marketplace"
 	"github.com/vivekyarra/sway/engine/internal/shop"
 	"github.com/vivekyarra/sway/engine/internal/testdb"
 )
 
 type Kit struct {
 	DB    *db.DB
-	World *seed.World
+	World *marketplace.World
 	Agent *agent.Agent
 	Shop  *shop.Service
 	Attr  *attribution.Runner
@@ -37,7 +37,7 @@ func New(t testing.TB) *Kit {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	w, err := seed.Install(ctx, d, int(cfg.VestingWindow.Seconds()), nil)
+	w, err := marketplace.Install(ctx, d, int(cfg.VestingWindow.Seconds()), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

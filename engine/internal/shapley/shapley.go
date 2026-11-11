@@ -45,13 +45,13 @@ func Exact(n int, v Values) ([]float64, error) {
 // MonteCarlo estimates φ by averaging marginal contributions over random permutations.
 // value is called lazily, so callers can back it with a cache and count real evaluations.
 // Returns the estimates and the per-player standard error.
-func MonteCarlo(n, permutations int, seed uint64, value func(mask uint32) float64) (phi, stderr []float64) {
+func MonteCarlo(n, permutations int, key uint64, value func(mask uint32) float64) (phi, stderr []float64) {
 	phi = make([]float64, n)
 	sq := make([]float64, n)
 	if n == 0 || permutations <= 0 {
 		return phi, make([]float64, n)
 	}
-	r := rand.New(rand.NewPCG(seed, seed^0x9e3779b97f4a7c15))
+	r := rand.New(rand.NewPCG(key, key^0x9e3779b97f4a7c15))
 	perm := make([]int, n)
 	for i := range perm {
 		perm[i] = i

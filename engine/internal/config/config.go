@@ -142,8 +142,8 @@ func Load() (Config, error) {
 	if llmMode != "claude" {
 		llmBase = str("AI_BASE_URL", llmBase)
 	}
-	llmModel = str("DECISION_MODEL", str("AI_MODEL", llmModel))
-	llmExplain = str("EXPLAIN_MODEL", str("AI_MODEL", llmExplain))
+	llmModel = modelFor(llmMode, str("DECISION_MODEL", str("AI_MODEL", llmModel)), llmModel)
+	llmExplain = modelFor(llmMode, str("EXPLAIN_MODEL", str("AI_MODEL", llmExplain)), llmExplain)
 	llmRPM = num("AI_RPM", llmRPM)
 
 	port := str("PORT", "8080")
@@ -245,4 +245,14 @@ func splitList(s string) []string {
 		}
 	}
 	return out
+}
+
+// modelFor keeps a configured model only when it belongs to the active provider, so a leftover
+// Claude model name does not reach Gemini or an OpenAI-compatible API (and the reverse).
+func modelFor(mode, configured, fallback string) string {
+	isClaude := strings.HasPrefix(configured, "claude-")
+	if (mode == "claude") != isClaude {
+		return fallback
+	}
+	return configured
 }

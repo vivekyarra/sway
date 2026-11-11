@@ -12,7 +12,7 @@ import (
 	"github.com/vivekyarra/sway/engine/internal/testdb"
 )
 
-// Web service and worker booting at the same moment on an empty database must seed exactly once.
+// Web service and worker booting at the same moment on an empty database must install the catalog exactly once.
 func TestConcurrentBootstrapSeedsOnce(t *testing.T) {
 	d := testdb.New(t)
 	url := d.Pool.Config().ConnString()

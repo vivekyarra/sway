@@ -5,12 +5,12 @@ import (
 	"testing"
 
 	"github.com/vivekyarra/sway/engine/internal/screening"
-	"github.com/vivekyarra/sway/engine/internal/seed"
+	"github.com/vivekyarra/sway/engine/internal/marketplace"
 )
 
 // DealBot is flagged, Copycat is a duplicate of Priya, Priya is not flagged.
 func TestCuratedScreening(t *testing.T) {
-	w, err := seed.Load()
+	w, err := marketplace.Load()
 	if err != nil {
 		t.Fatal(err)
 	}

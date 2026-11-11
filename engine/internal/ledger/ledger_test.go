@@ -10,7 +10,7 @@ import (
 	"github.com/vivekyarra/sway/engine/internal/testdb"
 )
 
-func seed(t *testing.T, d *db.DB) {
+func setup(t *testing.T, d *db.DB) {
 	t.Helper()
 	ctx := context.Background()
 	stmts := []string{
@@ -42,7 +42,7 @@ func post(t *testing.T, d *db.DB, es ...ledger.Entry) []ledger.Entry {
 
 func TestPostIdempotentBalancedAndChained(t *testing.T) {
 	d := testdb.New(t)
-	seed(t, d)
+	setup(t, d)
 	ctx := context.Background()
 	entries := []ledger.Entry{
 		{Type: ledger.CommissionReserved, OrderID: "o1", From: ledger.MerchantFunding, To: ledger.OrderCommission, Amount: 1832, IdemKey: "res|o1"},
@@ -80,7 +80,7 @@ func TestPostIdempotentBalancedAndChained(t *testing.T) {
 
 func TestAppendOnlyAndTamperDetection(t *testing.T) {
 	d := testdb.New(t)
-	seed(t, d)
+	setup(t, d)
 	ctx := context.Background()
 	post(t, d,
 		ledger.Entry{Type: ledger.CommissionReserved, OrderID: "o1", From: ledger.MerchantFunding, To: ledger.OrderCommission, Amount: 1832, IdemKey: "a"},
@@ -111,7 +111,7 @@ func TestAppendOnlyAndTamperDetection(t *testing.T) {
 
 func TestConcurrentPostsKeepChainLinear(t *testing.T) {
 	d := testdb.New(t)
-	seed(t, d)
+	setup(t, d)
 	ctx := context.Background()
 	post(t, d, ledger.Entry{Type: ledger.CommissionReserved, OrderID: "o1", From: ledger.MerchantFunding, To: ledger.OrderCommission, Amount: 100000, IdemKey: "fund"})
 	var wg sync.WaitGroup
@@ -147,7 +147,7 @@ func TestConcurrentPostsKeepChainLinear(t *testing.T) {
 
 func TestRejectsMalformed(t *testing.T) {
 	d := testdb.New(t)
-	seed(t, d)
+	setup(t, d)
 	err := d.Tx(context.Background(), func(q db.Q) error {
 		_, err := ledger.Post(context.Background(), q, ledger.Entry{Type: "X", From: "a", To: "a", Amount: 5, IdemKey: "x"})
 		return err
@@ -167,7 +167,7 @@ func TestRejectsMalformed(t *testing.T) {
 // Defense in depth: no entry may take a creator or commission account below zero, whatever the caller computed.
 func TestOverdraftRefused(t *testing.T) {
 	d := testdb.New(t)
-	seed(t, d)
+	setup(t, d)
 	post(t, d,
 		ledger.Entry{Type: ledger.CommissionReserved, OrderID: "o1", From: ledger.MerchantFunding, To: ledger.OrderCommission, Amount: 100, IdemKey: "r"},
 		ledger.Entry{Type: ledger.AccruePending, OrderID: "o1", CreatorID: "c1", From: ledger.OrderCommission, To: ledger.CreatorPending, Amount: 60, IdemKey: "a"},

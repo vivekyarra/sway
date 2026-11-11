@@ -1,6 +1,6 @@
-// Package seed loads Sway's curated marketplace: one merchant, its products, the creators who review
+// Package marketplace loads Sway's curated marketplace: one merchant, its products, the creators who review
 // them and the sources they wrote. All brands, people and texts are original to Sway.
-package seed
+package marketplace
 
 import (
 	"context"
@@ -58,7 +58,7 @@ func Load() (*World, error) {
 	}
 	var w World
 	if err := json.Unmarshal(raw, &w); err != nil {
-		return nil, fmt.Errorf("seed: catalog.json: %w", err)
+		return nil, fmt.Errorf("marketplace: catalog.json: %w", err)
 	}
 	entries, err := fs.ReadDir(dataFS, "data/sources")
 	if err != nil {
@@ -71,7 +71,7 @@ func Load() (*World, error) {
 		}
 		s, err := ParseSource(string(b))
 		if err != nil {
-			return nil, fmt.Errorf("seed: %s: %w", e.Name(), err)
+			return nil, fmt.Errorf("marketplace: %s: %w", e.Name(), err)
 		}
 		w.Sources = append(w.Sources, s)
 	}
@@ -83,7 +83,7 @@ func (w *World) validate() error {
 	products, creators := map[string]bool{}, map[string]bool{}
 	for _, p := range w.Products {
 		if _, ok := w.Categories[p.Category]; !ok {
-			return fmt.Errorf("seed: product %s has unknown category %s", p.ID, p.Category)
+			return fmt.Errorf("marketplace: product %s has unknown category %s", p.ID, p.Category)
 		}
 		products[p.ID] = true
 	}
@@ -92,11 +92,11 @@ func (w *World) validate() error {
 	}
 	for _, s := range w.Sources {
 		if !creators[s.CreatorID] {
-			return fmt.Errorf("seed: source %s has unknown creator %s", s.ID, s.CreatorID)
+			return fmt.Errorf("marketplace: source %s has unknown creator %s", s.ID, s.CreatorID)
 		}
 		for _, p := range s.ProductIDs {
 			if !products[p] {
-				return fmt.Errorf("seed: source %s links unknown product %s", s.ID, p)
+				return fmt.Errorf("marketplace: source %s links unknown product %s", s.ID, p)
 			}
 		}
 	}
@@ -232,7 +232,7 @@ func Install(ctx context.Context, d *db.DB, vestingWindowSeconds int, cls screen
 		return nil, err
 	}
 	if err := d.Tx(ctx, func(q db.Q) error { return Apply(ctx, q, w, vestingWindowSeconds) }); err != nil {
-		return nil, fmt.Errorf("seed apply: %w", err)
+		return nil, fmt.Errorf("marketplace install: %w", err)
 	}
 	srcs, err := catalog.AllSources(ctx, d.Pool)
 	if err != nil {

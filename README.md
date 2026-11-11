@@ -142,7 +142,7 @@ flowchart LR
 - **Trust & safety.** The LLM classifies sources that try to instruct AI agents.
 - **Creator explanations.** Plain-language "why your review mattered" notes; the real numbers are inserted by code.
 
-Providers are pluggable behind one interface: **Google Gemini** (`GEMINI_API_KEY`, via its OpenAI-compatible endpoint), **Anthropic Claude** (`ANTHROPIC_API_KEY`, native structured outputs) or **any OpenAI-compatible API** (`AI_API_KEY` + `AI_BASE_URL`: OpenAI, Groq, OpenRouter, a local model). Free-tier quotas are respected with request pacing (`AI_RPM`) and retry with backoff on 429/5xx. Shapley attribution needs up to 64 counterfactual decisions per order, so identical coalitions hit the run cache, and if the model is unavailable mid-run a decision falls back to Sway's deterministic engine (counted on `/api/health`) so a purchase never stalls. With no key at all, the whole pipeline runs on that engine.
+Providers are pluggable behind one interface: **Google Gemini** (`GEMINI_API_KEY`, via its OpenAI-compatible endpoint), **Anthropic Claude** (`ANTHROPIC_API_KEY`, native structured outputs) or **any OpenAI-compatible API** (`AI_API_KEY` + `AI_BASE_URL`: OpenAI, Groq, OpenRouter, a local model). Provider rate limits are respected with request pacing (`AI_RPM`) and retry with backoff on 429/5xx. Shapley attribution evaluates up to 64 counterfactual decisions per order; identical coalitions hit the run cache, and a resilient fallback to Sway's deterministic engine (counted on `/api/health`) keeps every purchase moving. With no key set, the whole pipeline runs on that engine.
 
 ### Production engineering
 
@@ -229,7 +229,7 @@ cd engine && go run ./cmd/swayload -shoppers 32 -orders 400
 
 ```text
 engine/                 Go: one binary for the API, worker and embedded UI
-  cmd/sway/             serve · worker · migrate · seed · reset · healthcheck
+  cmd/sway/             serve · worker · migrate · install · reset · healthcheck
   cmd/swayload/         concurrent load test with books-must-balance checks
   internal/agent/       LLM engines (Gemini/OpenAI-compatible, Claude), local engine, run cache, value function
   internal/attribution/ leave-one-out, exact Shapley, allocation

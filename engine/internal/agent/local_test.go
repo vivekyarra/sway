@@ -7,14 +7,14 @@ import (
 
 	"github.com/vivekyarra/sway/engine/internal/agent"
 	"github.com/vivekyarra/sway/engine/internal/catalog"
-	"github.com/vivekyarra/sway/engine/internal/seed"
+	"github.com/vivekyarra/sway/engine/internal/marketplace"
 )
 
 const tau = 10
 
 func world(t *testing.T) ([]catalog.Product, []catalog.Source) {
 	t.Helper()
-	w, err := seed.Load()
+	w, err := marketplace.Load()
 	if err != nil {
 		t.Fatal(err)
 	}

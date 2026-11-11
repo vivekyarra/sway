@@ -16,7 +16,7 @@ import (
 	"github.com/vivekyarra/sway/engine/internal/db"
 	"github.com/vivekyarra/sway/engine/internal/payments"
 	"github.com/vivekyarra/sway/engine/internal/screening"
-	"github.com/vivekyarra/sway/engine/internal/seed"
+	"github.com/vivekyarra/sway/engine/internal/marketplace"
 	"github.com/vivekyarra/sway/engine/internal/shop"
 )
 
@@ -45,7 +45,7 @@ var history = []historyOrder{
 type Builder struct {
 	DB    *db.DB
 	Cfg   config.Config
-	World *seed.World
+	World *marketplace.World
 	Pay   *payments.Service
 	Log   *slog.Logger
 }
@@ -59,7 +59,7 @@ func Installed(ctx context.Context, d *db.DB) (bool, error) {
 
 // Install loads the catalog and builds the order history.
 func (b *Builder) Install(ctx context.Context, cls screening.Classifier) error {
-	w, err := seed.Install(ctx, b.DB, int(b.Cfg.VestingWindow.Seconds()), cls)
+	w, err := marketplace.Install(ctx, b.DB, int(b.Cfg.VestingWindow.Seconds()), cls)
 	if err != nil {
 		return err
 	}

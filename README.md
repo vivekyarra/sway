@@ -209,7 +209,7 @@ cd engine && DATABASE_URL=postgres://localhost:5432/sway?sslmode=disable go run 
 
 **Connect PayPal Sandbox and an AI model.** Copy `.env.example` to `.env` and set `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_WEBHOOK_ID` (webhook URL `https://<host>/api/webhooks/paypal`) and one AI key: `GEMINI_API_KEY` (free at [aistudio.google.com/apikey](https://aistudio.google.com/apikey)), `ANTHROPIC_API_KEY`, or `AI_API_KEY` + `AI_BASE_URL`. `PAYPAL_SANDBOX_BUYER_EMAIL` / `_PASSWORD` appear in the judge tour, and `CREATOR_PAYPAL_EMAILS` routes creator payouts to Sandbox accounts you can log into. `CHANNEL3_API_KEY` with `CATALOG_MODE=live` opens the live product catalog.
 
-**Deploy:** [`render.yaml`](render.yaml) provisions the web service (with the background worker running inline) and Postgres on Render's free tier.
+**Deploy:** [`render.yaml`](render.yaml) provisions the web service (with the background worker running inline) on Render's free tier; point `DATABASE_URL` at any Postgres 16 (the live site uses Neon).
 
 **Tests:**
 

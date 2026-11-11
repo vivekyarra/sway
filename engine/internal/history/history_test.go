@@ -51,7 +51,7 @@ func TestHistoryAndReset(t *testing.T) {
 			t.Fatalf("order %s unbalanced", o.ID)
 		}
 	}
-	ov, err := views.GetOrder(ctx, m.DB.Pool, "ord_seed_01")
+	ov, err := views.GetOrder(ctx, m.DB.Pool, "ord_hist_01")
 	if err != nil || ov.Job == nil || len(ov.Attributions) == 0 {
 		t.Fatalf("order view %+v %v", ov, err)
 	}

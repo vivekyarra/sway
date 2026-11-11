@@ -131,7 +131,6 @@ function Shop() {
                 ask(text);
               }
             }}
-            placeholder="I need noise-cancelling headphones for long-haul flights, under $250."
             className="min-h-[56px] flex-1 resize-none rounded-xl bg-paper px-4 py-3 text-[15px] outline-none ring-1 ring-line focus:ring-2 focus:ring-accent"
           />
           <button type="submit" className="btn btn-accent h-12 px-6" disabled={busy || !text.trim()}>

@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/vivekyarra/sway/engine/internal/screening"
 	"github.com/vivekyarra/sway/engine/internal/marketplace"
+	"github.com/vivekyarra/sway/engine/internal/screening"
 )
 
 // DealBot is flagged, Copycat is a duplicate of Priya, Priya is not flagged.

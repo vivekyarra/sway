@@ -13,13 +13,13 @@ import (
 	"github.com/vivekyarra/sway/engine/internal/paypal"
 )
 
-type stub struct {
+type paypalDouble struct {
 	tokens, creates, captures, failNext atomic.Int32
 	requestIDs                          []string
 	lastVerify                          map[string]json.RawMessage
 }
 
-func (m *stub) server(t *testing.T) *httptest.Server {
+func (m *paypalDouble) server(t *testing.T) *httptest.Server {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		body, _ := io.ReadAll(r.Body)
@@ -70,7 +70,7 @@ func (m *stub) server(t *testing.T) *httptest.Server {
 }
 
 func TestClientCreateRetriesWithSameRequestID(t *testing.T) {
-	m := &stub{}
+	m := &paypalDouble{}
 	c := paypal.NewClient(m.server(t).URL, "id", "secret", "WH-1")
 	m.failNext.Store(1)
 	o, err := c.CreateOrder(context.Background(), paypal.CreateOrderRequest{RequestID: "ord_1", ReferenceID: "ord_1", CustomID: "dec_1", AmountCents: 22900, Description: "Halvo Q7"})
@@ -92,7 +92,7 @@ func TestClientCreateRetriesWithSameRequestID(t *testing.T) {
 }
 
 func TestClientCaptureAlreadyCapturedReadsBack(t *testing.T) {
-	m := &stub{}
+	m := &paypalDouble{}
 	c := paypal.NewClient(m.server(t).URL, "id", "secret", "WH-1")
 	cp, err := c.CaptureOrder(context.Background(), "5O1", "capture-ord_1")
 	if err != nil {
@@ -104,7 +104,7 @@ func TestClientCaptureAlreadyCapturedReadsBack(t *testing.T) {
 }
 
 func TestClientVerifyWebhookSendsRawEvent(t *testing.T) {
-	m := &stub{}
+	m := &paypalDouble{}
 	c := paypal.NewClient(m.server(t).URL, "id", "secret", "WH-1")
 	raw := []byte(`{"id":"WH-EVT-1","event_type":"PAYMENT.CAPTURE.COMPLETED","resource":{"id":"CAP1","amount":{"value":"229.00"}}}`)
 	h := http.Header{}
@@ -129,7 +129,7 @@ func TestClientVerifyWebhookSendsRawEvent(t *testing.T) {
 }
 
 func TestClientBadCredentials(t *testing.T) {
-	m := &stub{}
+	m := &paypalDouble{}
 	c := paypal.NewClient(m.server(t).URL, "id", "wrong", "")
 	if _, err := c.CreateOrder(context.Background(), paypal.CreateOrderRequest{RequestID: "x", AmountCents: 100}); err == nil {
 		t.Fatal("expected auth failure")

@@ -17,10 +17,10 @@ import (
 	"github.com/vivekyarra/sway/engine/internal/db"
 	"github.com/vivekyarra/sway/engine/internal/history"
 	"github.com/vivekyarra/sway/engine/internal/jobs"
+	"github.com/vivekyarra/sway/engine/internal/marketplace"
 	"github.com/vivekyarra/sway/engine/internal/payments"
 	"github.com/vivekyarra/sway/engine/internal/paypal"
 	"github.com/vivekyarra/sway/engine/internal/screening"
-	"github.com/vivekyarra/sway/engine/internal/marketplace"
 	"github.com/vivekyarra/sway/engine/internal/shop"
 	"github.com/vivekyarra/sway/engine/internal/webui"
 )

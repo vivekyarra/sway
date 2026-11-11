@@ -11,9 +11,9 @@ import (
 	"github.com/vivekyarra/sway/engine/internal/config"
 	"github.com/vivekyarra/sway/engine/internal/db"
 	"github.com/vivekyarra/sway/engine/internal/jobs"
+	"github.com/vivekyarra/sway/engine/internal/marketplace"
 	"github.com/vivekyarra/sway/engine/internal/payments"
 	"github.com/vivekyarra/sway/engine/internal/paypal"
-	"github.com/vivekyarra/sway/engine/internal/marketplace"
 	"github.com/vivekyarra/sway/engine/internal/shop"
 	"github.com/vivekyarra/sway/engine/internal/testdb"
 )

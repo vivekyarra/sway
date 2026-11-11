@@ -375,8 +375,8 @@ function MerchantView() {
           </div>
           <input
             type="search"
-            placeholder="Filter…"
             aria-label="Filter rows"
+            title="Filter rows"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             className="ml-auto w-48 rounded-full bg-paper px-4 py-1.5 text-sm ring-1 ring-line focus:outline-none focus:ring-2 focus:ring-accent"

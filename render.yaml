@@ -1,13 +1,8 @@
-# Render Blueprint (free tier): one web service (API + UI + background worker inline) and Postgres.
+# Render Blueprint (free tier): one web service (API + UI + background worker inline).
+# Postgres: set DATABASE_URL to any Postgres 16 connection string (the live site uses Neon's free tier).
 # New > Blueprint > pick this repo. Fill the "sync: false" secrets in the dashboard (without them Sway runs in
 # PayPal test mode with its built-in reasoning engine). Register the PayPal webhook at
 # https://<service>.onrender.com/api/webhooks/paypal and paste its id into PAYPAL_WEBHOOK_ID.
-databases:
-  - name: sway-db
-    databaseName: sway
-    user: sway
-    plan: free
-
 services:
   - type: web
     name: sway
@@ -16,9 +11,7 @@ services:
     healthCheckPath: /api/health
     envVars:
       - key: DATABASE_URL
-        fromDatabase:
-          name: sway-db
-          property: connectionString
+        sync: false
       - key: WORKER_INLINE
         value: "true"
       - key: TRUST_PROXY

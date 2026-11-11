@@ -2,7 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
 // No serious or critical WCAG 2.1 A/AA violations on any surface.
-for (const path of ["/", "/shop/", "/order/?id=ord_seed_01", "/creator/?id=c_priya", "/merchant/"]) {
+for (const path of ["/", "/shop/", "/order/?id=ord_hist_01", "/creator/?id=c_priya", "/merchant/"]) {
   test(`accessibility: ${path}`, async ({ page }) => {
     await page.goto(path);
     await page.waitForLoadState("networkidle");

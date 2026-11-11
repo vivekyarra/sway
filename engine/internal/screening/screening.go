@@ -14,7 +14,7 @@ import (
 	"github.com/vivekyarra/sway/engine/internal/db"
 )
 
-// Classifier is an optional LLM check (Claude) layered on top of the rules.
+// Classifier is an optional LLM check layered on top of the rules.
 type Classifier interface {
 	ClassifyInjection(ctx context.Context, title, body string) (bool, string, error)
 }
@@ -101,12 +101,11 @@ func Screen(ctx context.Context, sources []catalog.Source, cls Classifier) ([]Ve
 		if hit, evidence := RuleCheck(s.Title + ". " + s.Body); hit {
 			v.Status, v.Reason = "blocked_injection", fmt.Sprintf("Blocked: tries to instruct AI agents (%q). Earns $0.", evidence)
 		} else if cls != nil {
-			v.ScreenedBy = "rules+claude"
 			flag, evidence, err := cls.ClassifyInjection(ctx, s.Title, s.Body)
-			if err != nil {
-				return nil, fmt.Errorf("screening %s: %w", s.ID, err)
+			if err == nil {
+				v.ScreenedBy = "rules+ai"
 			}
-			if flag {
+			if err == nil && flag {
 				v.Status, v.Reason = "blocked_injection", fmt.Sprintf("Blocked: tries to instruct AI agents (%s). Earns $0.", strings.TrimSpace(evidence))
 			}
 		}

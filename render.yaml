@@ -41,12 +41,12 @@ services:
         sync: false
       - key: CREATOR_PAYPAL_EMAILS
         sync: false
+      - key: GEMINI_API_KEY
+        sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
-      - key: DECISION_MODEL
-        value: claude-haiku-5-5
-      - key: EXPLAIN_MODEL
-        value: claude-haiku-5-5
+      - key: ATTRIBUTION_SAMPLES
+        value: "1"
       - key: CHANNEL3_API_KEY
         sync: false
 

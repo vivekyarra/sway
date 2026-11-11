@@ -1,7 +1,7 @@
 // Package config reads Sway's runtime configuration from the environment.
 //
 // Every value has a safe default so a fresh clone runs with zero setup:
-// no PayPal keys -> PayPal test mode; no Anthropic key -> Sway's built-in
+// no PayPal keys -> PayPal test mode; no AI key (Anthropic, Gemini or OpenAI-compatible) -> Sway's built-in
 // reasoning engine. The UI always shows which mode is live.
 package config
 
@@ -25,8 +25,9 @@ type PayPal struct {
 }
 
 type LLM struct {
-	Mode          string // "claude" or "local"
+	Mode          string // "claude", "gemini", "openai" (any OpenAI-compatible API) or "local"
 	APIKey        string
+	RPM           int // request pacing for rate-limited free tiers (0 = unpaced)
 	BaseURL       string
 	DecisionModel string
 	ExplainModel  string
@@ -117,14 +118,33 @@ func Load() (Config, error) {
 	}
 
 	key := str("ANTHROPIC_API_KEY", "")
+	llmBase := str("ANTHROPIC_API_BASE", "")
+	llmModel, llmExplain := "claude-haiku-5-5", "claude-haiku-5-5"
+	llmRPM := 0
 	llmMode := "local"
-	if key != "" {
+	switch {
+	case key != "":
 		llmMode = "claude"
+	case str("GEMINI_API_KEY", "") != "":
+		llmMode, key = "gemini", str("GEMINI_API_KEY", "")
+		llmBase = "https://generativelanguage.googleapis.com/v1beta/openai"
+		llmModel, llmExplain = "gemini-flash-lite-latest", "gemini-flash-lite-latest"
+		llmRPM = 14
+	case str("AI_API_KEY", "") != "":
+		llmMode, key = "openai", str("AI_API_KEY", "")
+		llmBase = str("AI_BASE_URL", "https://api.openai.com/v1")
+		llmModel, llmExplain = "gpt-4o-mini", "gpt-4o-mini"
 	}
 	llmMode = str("LLM_MODE", llmMode)
 	if llmMode == "sim" {
 		llmMode = "local" // earlier name
 	}
+	if llmMode != "claude" {
+		llmBase = str("AI_BASE_URL", llmBase)
+	}
+	llmModel = str("DECISION_MODEL", str("AI_MODEL", llmModel))
+	llmExplain = str("EXPLAIN_MODEL", str("AI_MODEL", llmExplain))
+	llmRPM = num("AI_RPM", llmRPM)
 
 	port := str("PORT", "8080")
 	c := Config{
@@ -154,9 +174,9 @@ func Load() (Config, error) {
 			BuyerEmail: str("PAYPAL_SANDBOX_BUYER_EMAIL", ""), BuyerPassword: str("PAYPAL_SANDBOX_BUYER_PASSWORD", ""),
 		},
 		LLM: LLM{
-			Mode: llmMode, APIKey: key, BaseURL: str("ANTHROPIC_API_BASE", ""),
-			DecisionModel: str("DECISION_MODEL", "claude-haiku-5-5"),
-			ExplainModel:  str("EXPLAIN_MODEL", "claude-haiku-5-5"),
+			Mode: llmMode, APIKey: key, BaseURL: llmBase, RPM: llmRPM,
+			DecisionModel: llmModel,
+			ExplainModel:  llmExplain,
 			Concurrency:   clamp(num("LLM_CONCURRENCY", 8), 1, 64),
 			Timeout:       time.Duration(num("LLM_TIMEOUT_SECONDS", 60)) * time.Second,
 		},
@@ -179,11 +199,14 @@ func Load() (Config, error) {
 	if c.PayPal.Mode == "sandbox" && (ppID == "" || ppSecret == "") {
 		errs = append(errs, "PAYPAL_MODE=sandbox needs PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET")
 	}
-	if c.LLM.Mode != "local" && c.LLM.Mode != "claude" {
-		errs = append(errs, "LLM_MODE must be local or claude")
-	}
-	if c.LLM.Mode == "claude" && key == "" {
-		errs = append(errs, "LLM_MODE=claude needs ANTHROPIC_API_KEY")
+	switch c.LLM.Mode {
+	case "local":
+	case "claude", "gemini", "openai":
+		if key == "" {
+			errs = append(errs, "LLM_MODE="+c.LLM.Mode+" needs an API key (ANTHROPIC_API_KEY, GEMINI_API_KEY or AI_API_KEY)")
+		}
+	default:
+		errs = append(errs, "LLM_MODE must be local, claude, gemini or openai")
 	}
 	if c.CommissionRateBps < 0 || c.CommissionRateBps > 10000 || c.SwayFeeBps < 0 || c.SwayFeeBps > 10000 {
 		errs = append(errs, "COMMISSION_RATE_BPS and SWAY_FEE_BPS must be within 0..10000")

@@ -54,11 +54,14 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error)
 	a := &App{Cfg: cfg, Log: log, DB: d}
 
 	var engine agent.Engine = agent.Local{}
-	var claude *agent.Claude
-	if cfg.LLM.Mode == "claude" {
-		claude = agent.NewClaude(cfg.LLM.APIKey, cfg.LLM.BaseURL, cfg.LLM.DecisionModel, cfg.LLM.ExplainModel, cfg.LLM.Timeout)
-		engine = claude
-		a.Classifier = claude
+	var explainer attribution.Explainer
+	switch cfg.LLM.Mode {
+	case "claude":
+		c := agent.NewClaude(cfg.LLM.APIKey, cfg.LLM.BaseURL, cfg.LLM.DecisionModel, cfg.LLM.ExplainModel, cfg.LLM.Timeout)
+		engine, a.Classifier, explainer = c, c, c
+	case "gemini", "openai":
+		c := agent.NewOpenAICompat(cfg.LLM.Mode, cfg.LLM.BaseURL, cfg.LLM.APIKey, cfg.LLM.DecisionModel, cfg.LLM.ExplainModel, cfg.LLM.RPM, cfg.LLM.Timeout)
+		engine, a.Classifier, explainer = c, c, c
 	}
 	a.Agent = agent.New(d, engine, cfg.LLM.Concurrency, cfg.Attribution.Tau)
 
@@ -79,9 +82,7 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error)
 	}
 	a.Pay = &payments.Service{DB: d, PP: provider, Cfg: cfg, Log: log}
 	a.Attr = &attribution.Runner{DB: d, Agent: a.Agent, Shop: a.Shop, Cfg: cfg.Attribution, Log: log, AfterAllocate: a.Pay.Reconcile}
-	if claude != nil {
-		a.Attr.Explainer = claude
-	}
+	a.Attr.Explainer = explainer
 	a.History = &history.Builder{DB: d, Cfg: cfg, World: w, Pay: a.Pay, Log: log}
 
 	handlers := a.Pay.JobHandlers()

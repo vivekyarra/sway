@@ -11,10 +11,10 @@
 ![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)
 ![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs)
 ![PayPal](https://img.shields.io/badge/PayPal-Orders%20·%20Refunds%20·%20Webhooks%20·%20Payouts-003087?logo=paypal)
-![Claude](https://img.shields.io/badge/Claude-agent%20%2B%20attribution-d97757)
+![AI](https://img.shields.io/badge/AI-Gemini%20·%20Claude%20·%20OpenAI--compatible-4285F4)
 ![MCP](https://img.shields.io/badge/MCP-server-17141f)
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/vivekyarra/sway)
+**Live: [sway-hx67.onrender.com](https://sway-hx67.onrender.com)** · [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/vivekyarra/sway)
 
 Built for **Build What's Next with PayPal and AI**
 
@@ -34,7 +34,7 @@ Affiliate marketing pays for clicks. Agent-side commission programs pay the agen
 
 Sway is the attribution and payout layer for agentic commerce.
 
-1. **A neutral agent decides.** Claude reads human-written sources and picks a product. It earns nothing for its choice, so it stays unbiased.
+1. **A neutral AI agent decides.** An LLM (Google Gemini on the live site; Claude or any OpenAI-compatible model also plug in) reads human-written sources and picks a product. It earns nothing for its choice, so it stays unbiased.
 2. **Sway measures causal influence.** After checkout, Sway replays the decision over every combination of sources and computes each source's exact **Shapley value**, its fair share of the purchase.
 3. **Commission follows influence.** The merchant's commission is split among the creators whose words changed the outcome. Content that tries to command AI agents, copied content, and sources that argued against the product earn nothing.
 4. **Money vests when the sale sticks.** PayPal refund and dispute webhooks decide. A return forfeits the commission, a dispute freezes it, and a refund after payout is netted against future earnings.
@@ -48,7 +48,7 @@ Sway is the attribution and payout layer for agentic commerce.
 
 ### Any AI agent can shop through Sway
 
-Sway is also an **MCP server**. Plug it into Claude or any MCP agent and it gets a neutral shopper with receipts: a pick, the human sources behind it, counterfactuals, and a PayPal checkout link for the person. The agent never touches money.
+Sway is also an **MCP server**. Plug it into Claude, ChatGPT or any MCP agent and it gets a neutral shopper with receipts: a pick, the human sources behind it, counterfactuals, and a PayPal checkout link for the person. The agent never touches money.
 
 ```bash
 claude mcp add --transport http sway https://<your-sway-host>/mcp
@@ -87,7 +87,7 @@ flowchart TB
     PP[PayPal: Orders · Refunds · Payouts] <--> API
     PP -->|signed webhooks| API
     W <--> PP
-    W --> C[Claude]
+    W --> C[LLM: Gemini · Claude · OpenAI-compatible]
     API --> C
     API --> C3[Channel3 live catalog]
 ```
@@ -110,7 +110,7 @@ flowchart LR
 - **Value function.** `v(S)` is the probability that the agent picks the purchased product when it sees only coalition `S`: per-candidate scores pass through a softmax (τ = 10) and are averaged over K samples.
 - **Exact Shapley.** `φᵢ = Σ_S |S|!(n−|S|−1)!/n! · [v(S∪i) − v(S)]` over the top six sources, all 64 coalitions evaluated in parallel, with an antithetic Monte Carlo mode for very large source sets. Sampling variance flows into every φ, so creators see `φ ± σ`, and every order shows its Shapley efficiency gap (≈ 1e-17).
 - **Influence share.** `share = (v(all) − v(none)) / v(all)`. When the spec sheets alone decide, the full commission returns to the merchant.
-- **Fair by construction.** Prompt-injection screening (rules plus a Claude classifier), 5-word-shingle duplicate detection, and a noise floor mean only meaningful influence is paid.
+- **Fair by construction.** Prompt-injection screening (rules plus an LLM classifier), 5-word-shingle duplicate detection, and a noise floor mean only meaningful influence is paid.
 
 ### Money that always balances
 
@@ -135,14 +135,14 @@ flowchart LR
 | Webhooks + signature verification | Capture, refund, reversal, dispute and payout events, verified against the raw bytes, deduplicated, processed through the same handlers as API responses | [`payments/webhooks.go`](engine/internal/payments/webhooks.go) |
 | Payouts | Creator payouts by email: outbox submission, status polling, reversals, cancelling unclaimed items | [`payments/payouts.go`](engine/internal/payments/payouts.go) |
 
-### Claude, everywhere it matters
+### AI, everywhere it matters
 
 - **The shopping agent.** One fixed prompt and model for every run, so counterfactuals are comparable. Output is constrained by structured outputs (a JSON schema), then validated.
 - **The attribution engine.** Every counterfactual re-run goes through a content-addressed cache, singleflight de-duplication and a shared concurrency limit.
-- **Trust & safety.** Claude classifies sources that try to instruct AI agents.
+- **Trust & safety.** The LLM classifies sources that try to instruct AI agents.
 - **Creator explanations.** Plain-language "why your review mattered" notes; the real numbers are inserted by code.
 
-When no Anthropic key is configured, Sway runs the same pipeline on its built-in deterministic reasoning engine, which reads the actual source text.
+Providers are pluggable behind one interface: **Google Gemini** (`GEMINI_API_KEY`, via its OpenAI-compatible endpoint), **Anthropic Claude** (`ANTHROPIC_API_KEY`, native structured outputs) or **any OpenAI-compatible API** (`AI_API_KEY` + `AI_BASE_URL`: OpenAI, Groq, OpenRouter, a local model). Free-tier quotas are respected with request pacing (`AI_RPM`) and retry with backoff on 429/5xx. Shapley attribution needs up to 64 counterfactual decisions per order, so identical coalitions hit the run cache, and if the model is unavailable mid-run a decision falls back to Sway's deterministic engine (counted on `/api/health`) so a purchase never stalls. With no key at all, the whole pipeline runs on that engine.
 
 ### Production engineering
 
@@ -207,7 +207,7 @@ cd web && npm ci && npm run build && npm run embed && cd ..
 cd engine && DATABASE_URL=postgres://localhost:5432/sway?sslmode=disable go run ./cmd/sway serve
 ```
 
-**Connect PayPal Sandbox and Claude.** Copy `.env.example` to `.env` and set `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_WEBHOOK_ID` (webhook URL `https://<host>/api/webhooks/paypal`) and `ANTHROPIC_API_KEY`. `PAYPAL_SANDBOX_BUYER_EMAIL` / `_PASSWORD` appear in the judge tour, and `CREATOR_PAYPAL_EMAILS` routes creator payouts to Sandbox accounts you can log into. `CHANNEL3_API_KEY` with `CATALOG_MODE=live` opens the live product catalog.
+**Connect PayPal Sandbox and an AI model.** Copy `.env.example` to `.env` and set `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_WEBHOOK_ID` (webhook URL `https://<host>/api/webhooks/paypal`) and one AI key: `GEMINI_API_KEY` (free at [aistudio.google.com/apikey](https://aistudio.google.com/apikey)), `ANTHROPIC_API_KEY`, or `AI_API_KEY` + `AI_BASE_URL`. `PAYPAL_SANDBOX_BUYER_EMAIL` / `_PASSWORD` appear in the judge tour, and `CREATOR_PAYPAL_EMAILS` routes creator payouts to Sandbox accounts you can log into. `CHANNEL3_API_KEY` with `CATALOG_MODE=live` opens the live product catalog.
 
 **Deploy:** [`render.yaml`](render.yaml) provisions the web service (with the background worker running inline) and Postgres on Render's free tier.
 
@@ -231,7 +231,7 @@ cd engine && go run ./cmd/swayload -shoppers 32 -orders 400
 engine/                 Go: one binary for the API, worker and embedded UI
   cmd/sway/             serve · worker · migrate · seed · reset · healthcheck
   cmd/swayload/         concurrent load test with books-must-balance checks
-  internal/agent/       Claude decision engine, local engine, run cache, value function
+  internal/agent/       LLM engines (Gemini/OpenAI-compatible, Claude), local engine, run cache, value function
   internal/attribution/ leave-one-out, exact Shapley, allocation
   internal/shapley/     exact and Monte Carlo Shapley values
   internal/ledger/      double-entry, hash-chained, append-only ledger
@@ -245,7 +245,7 @@ assets/screenshots/     product screenshots
 
 ## 🧱 Built with
 
-Go · PostgreSQL · Claude (Anthropic API) · PayPal Orders v2, JS SDK, Refunds, Webhooks and Payouts · Model Context Protocol · Next.js · TypeScript · Tailwind CSS · AG Grid · Channel3 · Render · Docker · Playwright
+Go · PostgreSQL · Google Gemini · Claude (Anthropic API) · PayPal Orders v2, JS SDK, Refunds, Webhooks and Payouts · Model Context Protocol · Next.js · TypeScript · Tailwind CSS · AG Grid · Channel3 · Render · Docker · Playwright
 
 ## 📄 License
 

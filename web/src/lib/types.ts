@@ -342,7 +342,7 @@ export type AppConfig = {
   test_tools: boolean;
   catalog_mode: string;
   paypal: { mode: "sandbox" | "test"; client_id?: string; buyer_email?: string; buyer_password?: string };
-  llm: { mode: "claude" | "local"; model: string; prompt_version: string };
+  llm: { mode: "claude" | "gemini" | "openai" | "local"; model: string; prompt_version: string };
   vesting_window_seconds: number;
   commission_rate_bps: number;
   sway_fee_bps: number;

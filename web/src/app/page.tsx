@@ -22,7 +22,7 @@ export default function Home() {
       <section className="relative mx-auto max-w-7xl px-4 pb-16 pt-14 sm:px-6 sm:pt-20">
         <div aria-hidden className="pointer-events-none absolute -right-40 -top-24 h-[480px] w-[480px] rounded-full bg-[radial-gradient(circle,rgba(90,63,242,0.16),transparent_65%)]" />
         <div className="eyebrow mb-4 flex items-center gap-2">
-          <span className="h-1.5 w-1.5 rounded-full bg-accent" /> Agentic commerce · PayPal · Claude
+          <span className="h-1.5 w-1.5 rounded-full bg-accent" /> Agentic commerce · PayPal · AI agents
         </div>
         <h1 className="display max-w-4xl text-[2.7rem] sm:text-7xl">
           AI agents shop now. <span className="italic text-accent">The people who taught them</span> should get paid.

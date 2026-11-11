@@ -77,8 +77,8 @@ export function TopBar() {
               <Badge tone={cfg.paypal.mode === "sandbox" ? "good" : "test"} title={cfg.paypal.mode === "sandbox" ? "PayPal Sandbox REST API" : "PayPal test mode: add PayPal credentials to use Sandbox"}>
                 PayPal {cfg.paypal.mode === "sandbox" ? "Sandbox" : "Test mode"}
               </Badge>
-              <Badge tone={cfg.llm.mode === "claude" ? "good" : "neutral"} title={`Decision model: ${cfg.llm.model}`}>
-                Agent: {cfg.llm.mode === "claude" ? cfg.llm.model : "Sway engine"}
+              <Badge tone={cfg.llm.mode !== "local" ? "good" : "neutral"} title={`Decision model: ${cfg.llm.model}`}>
+                Agent: {cfg.llm.mode !== "local" ? cfg.llm.model : "Sway engine"}
               </Badge>
             </span>
           )}

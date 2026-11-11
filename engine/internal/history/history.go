@@ -83,7 +83,7 @@ func (b *Builder) History(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("history decision %d: %w", i, err)
 		}
-		orderID := fmt.Sprintf("ord_seed_%02d", i+1)
+		orderID := fmt.Sprintf("ord_hist_%02d", i+1)
 		err = b.DB.Tx(ctx, func(q db.Q) error {
 			var rate int
 			if err := q.QueryRow(ctx, `SELECT commission_rate_bps FROM merchants WHERE id=$1`, dv.Chosen.MerchantID).Scan(&rate); err != nil {

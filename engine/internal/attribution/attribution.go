@@ -211,7 +211,7 @@ func (r *Runner) run(ctx context.Context, orderID string) error {
 	if needed > r.Cfg.MaxCalls {
 		method = "monte_carlo"
 		seen := map[uint32]bool{}
-		shapley.MonteCarlo(n, r.Cfg.MCPermutations, seedFor(orderID), func(m uint32) float64 {
+		shapley.MonteCarlo(n, r.Cfg.MCPermutations, keyFor(orderID), func(m uint32) float64 {
 			if !seen[m] {
 				seen[m] = true
 				evalMasks = append(evalMasks, m)
@@ -258,7 +258,7 @@ func (r *Runner) run(ctx context.Context, orderID string) error {
 		}
 		phiStd = exactStd(n, values, k)
 	} else {
-		phi, phiStd = shapley.MonteCarlo(n, r.Cfg.MCPermutations, seedFor(orderID), func(m uint32) float64 { return values[m].Mean })
+		phi, phiStd = shapley.MonteCarlo(n, r.Cfg.MCPermutations, keyFor(orderID), func(m uint32) float64 { return values[m].Mean })
 	}
 	vAll := vFull.Mean
 	vBg := valueOr(values, 0, vNone.Mean)
@@ -547,7 +547,7 @@ func except(all []string, id string) []string {
 	return out
 }
 
-func seedFor(s string) uint64 {
+func keyFor(s string) uint64 {
 	var h uint64 = 1469598103934665603
 	for i := 0; i < len(s); i++ {
 		h ^= uint64(s[i])

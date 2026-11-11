@@ -13,7 +13,7 @@ import (
 )
 
 // Web service and worker booting at the same moment on an empty database must install the catalog exactly once.
-func TestConcurrentBootstrapSeedsOnce(t *testing.T) {
+func TestConcurrentBootstrapInstallsOnce(t *testing.T) {
 	d := testdb.New(t)
 	url := d.Pool.Config().ConnString()
 	t.Setenv("DATABASE_URL", url)

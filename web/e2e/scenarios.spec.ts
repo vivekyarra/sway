@@ -86,8 +86,8 @@ test("unsupported requests suggest what the agent can shop", async ({ page }) =>
 });
 
 test("order history, pretty URLs and creator dashboards", async ({ page }) => {
-  await page.goto("/orders/ord_seed_01");
-  await expect(page).toHaveURL(/\/order\/\?id=ord_seed_01/);
+  await page.goto("/orders/ord_hist_01");
+  await expect(page).toHaveURL(/\/order\/\?id=ord_hist_01/);
   await expect(page.getByText("order history").first()).toBeVisible();
   await page.goto("/creator/?id=c_dealbot");
   await expect(page.getByText(/Blocked: tries to instruct AI agents/)).toBeVisible();
@@ -98,7 +98,7 @@ test("order history, pretty URLs and creator dashboards", async ({ page }) => {
 test("every page fits a phone without horizontal scrolling", async ({ browser }) => {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const page = await ctx.newPage();
-  for (const path of ["/", "/shop/", "/order/?id=ord_seed_01", "/creator/?id=c_priya", "/merchant/"]) {
+  for (const path of ["/", "/shop/", "/order/?id=ord_hist_01", "/creator/?id=c_priya", "/merchant/"]) {
     await page.goto(path);
     await page.waitForLoadState("networkidle");
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
